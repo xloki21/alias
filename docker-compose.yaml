@@ -1,0 +1,40 @@
+services:
+  alias:
+    profiles:
+      - in-memory
+      - mongodb
+    container_name: alias
+    image: alias:v1.0.0beta
+    environment:
+      MONGO_USERNAME: ${MONGO_USERNAME:-user}
+      MONGO_PASSWORD: ${MONGO_PASSWORD:-pass}
+      MONGO_AUTHSOURCE: ${MONGO_AUTHSOURCE:-admin}
+    build:
+      context: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./config/config.docker.yaml:/etc/alias/config.yaml
+    networks:
+      - aliasnet
+  mongodb:
+    profiles:
+      - mongodb
+    image: mongo:7.0.6
+    container_name: mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME:-root}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD:-root}
+      MONGO_AUTHSOURCE: ${MONGO_AUTHSOURCE:-admin}
+      MONGO_USERNAME: ${MONGO_USERNAME:-user}
+      MONGO_PASSWORD: ${MONGO_PASSWORD:-pass}
+    restart: always
+    ports:
+      - "27017:27017"
+    volumes:
+      - ./migrations/mongodb/mongo-init.sh:/docker-entrypoint-initdb.d/mongo-init.sh:ro
+    networks:
+      - aliasnet
+networks:
+  aliasnet:
+    driver: bridge

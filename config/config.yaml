@@ -1,0 +1,11 @@
+server:
+  address: localhost:8080
+storage:
+  type: mongodb # in-memory | mongodb
+  config:
+    uri: mongodb://localhost:27017
+    database: appdb
+
+logger:
+  level: info
+  encoding: console
