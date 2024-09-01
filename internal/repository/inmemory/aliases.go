@@ -57,7 +57,7 @@ func (a *AliasRepository) FindOne(ctx context.Context, alias *domain.Alias) erro
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	if presented, ok := a.db[alias.URL.String()]; ok {
-		alias = presented
+		*alias = *presented
 		return nil
 	} else {
 		return domain.ErrAliasNotFound
@@ -82,7 +82,7 @@ func (a *AliasRepository) RemoveOne(ctx context.Context, alias *domain.Alias) er
 }
 
 func (a *AliasRepository) DecreaseTTLCounter(ctx context.Context, alias domain.Alias) error {
-	const fn = "in-memory::DecreaseTTL"
+	const fn = "in-memory::DecreaseTTLCounter"
 	zap.S().Infow("repo",
 		zap.String("name", "AliasRepository"),
 		zap.String("fn", fn),

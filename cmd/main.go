@@ -2,12 +2,13 @@ package main
 
 import (
 	"context"
+	"log"
+	"os"
+
 	"github.com/joho/godotenv"
 	"github.com/xloki21/alias/internal/app"
 	"github.com/xloki21/alias/internal/app/config"
 	"go.uber.org/zap"
-	"log"
-	"os"
 )
 
 func main() {
@@ -28,6 +29,7 @@ func main() {
 	if err != nil {
 		zap.S().Fatal("failed to start application", zap.Error(err))
 	}
+
 	if err := application.Run(context.Background()); err != nil {
 		zap.S().Fatal("failed to start application", zap.Error(err))
 	}

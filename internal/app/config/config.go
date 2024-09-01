@@ -3,13 +3,14 @@ package config
 import (
 	"errors"
 	"fmt"
+	"log"
+	"os"
+	"time"
+
 	"github.com/spf13/viper"
 	"github.com/xloki21/alias/internal/repository"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-	"log"
-	"os"
-	"time"
 )
 
 type Server struct {

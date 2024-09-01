@@ -32,7 +32,8 @@ func (s *AliasLifeCycleService) Publish(ctx context.Context, event interface{}) 
 }
 
 func (s *AliasLifeCycleService) ProcessEvents(ctx context.Context) error {
-	const fn = "TTLService::ProcessEvents"
+	const fn = "AliasLifeCycleService::ProcessEvents"
+
 	for {
 		select {
 		case message := <-s.eventQueue:
@@ -46,6 +47,7 @@ func (s *AliasLifeCycleService) ProcessEvents(ctx context.Context) error {
 					zap.String("fn", fn),
 					zap.String("received", event.String()),
 				)
+
 				err := s.statsRepo.PushStats(ctx, event)
 				if err != nil {
 					zap.S().Errorw("service",
@@ -85,7 +87,6 @@ func (s *AliasLifeCycleService) ProcessEvents(ctx context.Context) error {
 		default:
 		}
 	}
-
 }
 
 func NewAliasLifeCycleService(aliasRepo aliasRepository, statsRepo statsRepository) *AliasLifeCycleService {
