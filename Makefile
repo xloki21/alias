@@ -18,7 +18,7 @@ mocks:
 
 .PHONY: docker
 docker:
-	docker build . -t alias:v1.0.0alpha
+	docker build . -t alias:v1.0.0beta
 
 .PHONY: migrate_up
 migrate_up:

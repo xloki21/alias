@@ -95,8 +95,8 @@ func (ac *AliasController) CreateAlias(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.WriteHeader(http.StatusCreated)
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
 	if _, err := w.Write(answer); err != nil {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
@@ -204,8 +204,8 @@ func (ac *AliasController) CreateAliases(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	w.WriteHeader(http.StatusCreated)
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
 	if _, err := w.Write(answer); err != nil {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
@@ -230,7 +230,6 @@ func (ac *AliasController) Redirect(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-
 	http.Redirect(w, r, alias.Origin.String(), http.StatusPermanentRedirect)
 }
 
