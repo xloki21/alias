@@ -1,0 +1,12 @@
+[
+  {
+    "createUser": "user2",
+    "pwd": "pass2",
+    "roles": [
+      {
+        "role": "dbOwner",
+        "db": "appdb2"
+      }
+    ]
+  }
+]
