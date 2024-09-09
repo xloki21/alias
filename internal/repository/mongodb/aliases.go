@@ -13,6 +13,11 @@ import (
 	"net/url"
 )
 
+const (
+	AliasCollectionName = "aliases"
+	StatsCollectionName = "stats"
+)
+
 // aliasDocument is DTO for alias collection
 type aliasDocument struct {
 	ID          string   `bson:"_id"`

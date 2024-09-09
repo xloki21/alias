@@ -15,20 +15,20 @@ type eventStat struct {
 	Origin     *url.URL
 }
 
-type ExpiredURLStatsRepository struct {
+type AliasStatsRepository struct {
 	db map[string]eventStat
 	mu sync.RWMutex
 }
 
-// NewExpiredURLStatsRepository creates a new ExpiredURLStatsRepository
-func NewExpiredURLStatsRepository() *ExpiredURLStatsRepository {
-	return &ExpiredURLStatsRepository{
+// NewAliasStatsRepository creates a new AliasStatsRepository
+func NewAliasStatsRepository() *AliasStatsRepository {
+	return &AliasStatsRepository{
 		db: make(map[string]eventStat),
 	}
 }
 
 // PushStats pushes data with statistics into collection
-func (r *ExpiredURLStatsRepository) PushStats(ctx context.Context, event domain.URLExpired) error {
+func (r *AliasStatsRepository) PushStats(ctx context.Context, event domain.AliasExpired) error {
 	const fn = "in-memory::PushStats"
 	zap.S().Infow("repo",
 		zap.String("name", "ExpiredURLStatsRepository"),

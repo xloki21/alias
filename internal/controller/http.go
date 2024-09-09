@@ -15,7 +15,6 @@ import (
 const maxGoroutines = 10
 
 type aliasService interface {
-	CreateOne(ctx context.Context, alias *domain.Alias) error
 	CreateMany(ctx context.Context, aliases []*domain.Alias) error
 	FindOne(ctx context.Context, linkID string) (*domain.Alias, error)
 	RemoveOne(ctx context.Context, alias *domain.Alias) error

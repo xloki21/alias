@@ -8,11 +8,13 @@ import (
 	"github.com/xloki21/alias/internal/controller"
 	"github.com/xloki21/alias/internal/controller/mw"
 	"github.com/xloki21/alias/internal/domain"
+	"github.com/xloki21/alias/internal/infrastructure/squeue"
 	"github.com/xloki21/alias/internal/repository"
 	"github.com/xloki21/alias/internal/repository/inmemory"
 	"github.com/xloki21/alias/internal/repository/mongodb"
-	"github.com/xloki21/alias/internal/service/lifecycle"
 	"github.com/xloki21/alias/internal/service/link"
+	"github.com/xloki21/alias/internal/service/manager"
+	"github.com/xloki21/alias/internal/service/stats"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.uber.org/zap"
@@ -51,6 +53,10 @@ func New(cfg config.AppConfig) (*Application, error) {
 	baseURLPrefix := fmt.Sprintf("http://%s%s", cfg.Server.Address, endpointRedirect)
 
 	var aliasService *link.AliasService
+
+	aliasUsedQ := squeue.New()
+	aliasExpiredQ := squeue.New()
+
 	switch cfg.Storage.Type {
 	case repository.MongoDB:
 
@@ -83,31 +89,28 @@ func New(cfg config.AppConfig) (*Application, error) {
 			return nil, err
 		}
 
-		aliasRepoMongoDB := mongodb.NewMongoDBAliasRepository(db.Collection("aliases"))
-		statsRepoMongoDB := mongodb.NewExpiredURLStatsRepository(db.Collection("stats"))
-		aliasLifeCycleSvc := lifecycle.NewAliasLifeCycleService(aliasRepoMongoDB, statsRepoMongoDB)
+		aliasRepoMongoDB := mongodb.NewMongoDBAliasRepository(db.Collection(mongodb.AliasCollectionName))
+		statsRepoMongoDB := mongodb.NewAliasStatsRepository(db.Collection(mongodb.StatsCollectionName))
+		aliasManagerSvc := manager.NewAliasManagerService(aliasRepoMongoDB, aliasUsedQ)
+		aliasManagerSvc.Process(ctx)
 
-		go func() {
-			if err := aliasLifeCycleSvc.ProcessEvents(ctx); err != nil {
-				zap.S().Fatalf("TTL service failed to start: %s", err.Error())
-			}
-		}()
+		aliasStatsSvc := stats.NewAliasStatisticsService(statsRepoMongoDB, aliasExpiredQ)
+		aliasStatsSvc.Process(ctx)
 
-		aliasService = link.NewAliasService(aliasLifeCycleSvc, aliasRepoMongoDB, baseURLPrefix)
+		aliasService = link.NewAliasService(aliasExpiredQ, aliasUsedQ, aliasRepoMongoDB, baseURLPrefix)
 
 	case repository.InMemory:
 		zap.S().Info("using in-memory storage type")
 		aliasRepoInMemory := inmemory.NewAliasRepository()
-		statsRepoInMemory := inmemory.NewExpiredURLStatsRepository()
-		aliasLifeCycleSvc := lifecycle.NewAliasLifeCycleService(aliasRepoInMemory, statsRepoInMemory)
+		statsRepoInMemory := inmemory.NewAliasStatsRepository()
 
-		go func() {
-			if err := aliasLifeCycleSvc.ProcessEvents(ctx); err != nil {
-				zap.S().Fatalf("TTL service error: %s", err.Error())
-			}
-		}()
+		aliasManagerSvc := manager.NewAliasManagerService(aliasRepoInMemory, aliasUsedQ)
+		aliasManagerSvc.Process(ctx)
 
-		aliasService = link.NewAliasService(aliasLifeCycleSvc, aliasRepoInMemory, baseURLPrefix)
+		aliasStatsSvc := stats.NewAliasStatisticsService(statsRepoInMemory, aliasExpiredQ)
+		aliasStatsSvc.Process(ctx)
+
+		aliasService = link.NewAliasService(aliasExpiredQ, aliasUsedQ, aliasRepoInMemory, baseURLPrefix)
 
 	default:
 		zap.S().Fatalf("unknown storage type: %s", cfg.Storage.Type)

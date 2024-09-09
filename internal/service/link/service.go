@@ -22,44 +22,19 @@ type aliasRepo interface {
 	RemoveOne(ctx context.Context, alias *domain.Alias) error
 }
 
-type eventPublisher interface {
-	Publish(ctx context.Context, event interface{}) error
+type eventProducer interface {
+	Produce(event any)
 }
 
 type AliasService struct {
 	baseURLPrefix string
 	repo          aliasRepo
-	publisher     eventPublisher
+	aliasExpiredQ eventProducer
+	aliasUsedQ    eventProducer
 }
 
 func (s *AliasService) Name() string {
 	return "AliasService"
-}
-
-// CreateOne creates a shortened link for the given origin
-func (s *AliasService) CreateOne(ctx context.Context, alias *domain.Alias) error {
-	const fn = "AliasService::CreateOne"
-	zap.S().Infow("service",
-		zap.String("name", s.Name()),
-		zap.String("fn", fn),
-		zap.String("origin", alias.Origin.String()))
-
-	suffix, err := randomizer.GenerateRandomStringURLSafe(randomSuffixLength)
-	if err != nil {
-		return err
-	}
-
-	validURL, err := url.Parse(fmt.Sprintf("%s/%s", s.baseURLPrefix, suffix))
-	if err != nil {
-		return err
-	}
-
-	alias.URL = validURL
-
-	if err := s.repo.SaveOne(ctx, alias); err != nil {
-		return fmt.Errorf("%s: %w", fn, err)
-	}
-	return nil
 }
 
 // CreateMany creates a set of shortened links for the given origin links
@@ -138,9 +113,9 @@ func (s *AliasService) FindOne(ctx context.Context, linkID string) (*domain.Alia
 	// check if alias is expired and send event with publisher
 	if alias.TTL == 0 {
 		event := alias.Expired()
-		if err := s.publisher.Publish(ctx, event); err != nil {
-			return nil, err
-		}
+
+		s.aliasExpiredQ.Produce(event)
+
 		zap.S().Infow("service",
 			zap.String("name", s.Name()),
 			zap.String("fn", fn),
@@ -157,9 +132,9 @@ func (s *AliasService) FindOne(ctx context.Context, linkID string) (*domain.Alia
 
 	// publish event
 	event := alias.Redirected()
-	if err := s.publisher.Publish(ctx, event); err != nil {
-		return nil, err
-	}
+
+	s.aliasUsedQ.Produce(event)
+
 	zap.S().Infow("service",
 		zap.String("name", s.Name()),
 		zap.String("fn", fn),
@@ -185,10 +160,11 @@ func (s *AliasService) RemoveOne(ctx context.Context, alias *domain.Alias) error
 }
 
 // NewAliasService creates a new alias service
-func NewAliasService(publisher eventPublisher, repo aliasRepo, urlPrefix string) *AliasService {
+func NewAliasService(aliasExpiredQ eventProducer, aliasUsedQ eventProducer, repo aliasRepo, urlPrefix string) *AliasService {
 	return &AliasService{
 		baseURLPrefix: urlPrefix,
-		publisher:     publisher,
+		aliasExpiredQ: aliasExpiredQ,
+		aliasUsedQ:    aliasUsedQ,
 		repo:          repo,
 	}
 }
