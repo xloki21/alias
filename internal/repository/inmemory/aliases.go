@@ -12,22 +12,6 @@ type AliasRepository struct {
 	db map[string]*domain.Alias
 }
 
-// SaveOne saves a alias link
-func (a *AliasRepository) SaveOne(ctx context.Context, alias *domain.Alias) error {
-	const fn = "in-memory::SaveOne"
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	zap.S().Infow("repo",
-		zap.String("name", "AliasRepository"),
-		zap.String("fn", fn),
-		zap.String("alias", alias.URL.String()),
-		zap.String("origin", alias.Origin.String()))
-	id := alias.URL.String()
-	alias.ID = id
-	a.db[id] = alias
-	return nil
-}
-
 // SaveMany saves many aliases in one run
 func (a *AliasRepository) SaveMany(ctx context.Context, aliases []*domain.Alias) error {
 	const fn = "in-memory::SaveMany"

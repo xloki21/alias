@@ -39,30 +39,6 @@ func NewMongoDBAliasRepository(collection *mongo.Collection) *AliasRepository {
 	}
 }
 
-// SaveOne saves a alias link
-func (a *AliasRepository) SaveOne(ctx context.Context, alias *domain.Alias) error {
-	const fn = "mongodb::SaveOne"
-	zap.S().Infow("repo",
-		zap.String("name", "AliasRepository"),
-		zap.String("fn", fn),
-		zap.String("alias", alias.URL.String()),
-		zap.String("origin", alias.Origin.String()))
-
-	document := bson.D{
-		{"alias", alias.URL},
-		{"origin", alias.Origin},
-		{"is_active", alias.IsActive},
-		{"is_permanent", alias.IsPermanent},
-		{"TTL", alias.TTL},
-	}
-	opStatus, err := a.collection.InsertOne(ctx, document)
-	if err != nil {
-		return err
-	}
-	alias.ID = opStatus.InsertedID.(primitive.ObjectID).Hex()
-	return nil
-}
-
 // SaveMany saves many aliases in bulk
 func (a *AliasRepository) SaveMany(ctx context.Context, aliases []*domain.Alias) error {
 	const fn = "mongodb::SaveMany"

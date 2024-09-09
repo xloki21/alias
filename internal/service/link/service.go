@@ -16,7 +16,6 @@ const (
 )
 
 type aliasRepo interface {
-	SaveOne(ctx context.Context, alias *domain.Alias) error
 	SaveMany(ctx context.Context, aliases []*domain.Alias) error
 	FindOne(ctx context.Context, alias *domain.Alias) error
 	RemoveOne(ctx context.Context, alias *domain.Alias) error
