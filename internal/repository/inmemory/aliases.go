@@ -22,7 +22,7 @@ func (a *AliasRepository) SaveMany(ctx context.Context, aliases []*domain.Alias)
 		zap.String("fn", fn),
 		zap.Int("alias count", len(aliases)))
 	for index := range aliases {
-		id := aliases[index].URL.String()
+		id := aliases[index].URL.Path
 		aliases[index].ID = id
 
 		a.db[id] = aliases[index]
@@ -33,14 +33,15 @@ func (a *AliasRepository) SaveMany(ctx context.Context, aliases []*domain.Alias)
 // FindOne gets the target link from the shortened one
 func (a *AliasRepository) FindOne(ctx context.Context, alias *domain.Alias) error {
 	const fn = "in-memory::FindOne"
+	id := alias.URL.Path
 	zap.S().Infow("repo",
 		zap.String("name", "AliasRepository"),
 		zap.String("fn", fn),
-		zap.String("alias", alias.URL.String()))
+		zap.String("id", id))
 
 	a.mu.RLock()
 	defer a.mu.RUnlock()
-	if presented, ok := a.db[alias.URL.String()]; ok {
+	if presented, ok := a.db[id]; ok {
 		*alias = *presented
 		return nil
 	} else {
@@ -51,10 +52,11 @@ func (a *AliasRepository) FindOne(ctx context.Context, alias *domain.Alias) erro
 // RemoveOne removes a shortened link
 func (a *AliasRepository) RemoveOne(ctx context.Context, alias *domain.Alias) error {
 	const fn = "in-memory::RemoveOne"
+	id := alias.URL.Path
 	zap.S().Infow("repo",
 		zap.String("name", "AliasRepository"),
 		zap.String("fn", fn),
-		zap.String("alias", alias.URL.String()))
+		zap.String("id", id))
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if _, ok := a.db[alias.URL.String()]; ok {
@@ -67,10 +69,11 @@ func (a *AliasRepository) RemoveOne(ctx context.Context, alias *domain.Alias) er
 
 func (a *AliasRepository) DecreaseTTLCounter(ctx context.Context, alias domain.Alias) error {
 	const fn = "in-memory::DecreaseTTLCounter"
+	id := alias.URL.Path
 	zap.S().Infow("repo",
 		zap.String("name", "AliasRepository"),
 		zap.String("fn", fn),
-		zap.String("alias", alias.URL.String()))
+		zap.String("id", id))
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -78,12 +81,12 @@ func (a *AliasRepository) DecreaseTTLCounter(ctx context.Context, alias domain.A
 		return domain.ErrAliasExpired
 	}
 
-	if _, ok := a.db[alias.URL.String()]; !ok { // check: possibly unnecessary
+	if _, ok := a.db[id]; !ok { // check: possibly unnecessary
 		return domain.ErrAliasNotFound
 	}
 
 	// decrease TTL counter
-	a.db[alias.URL.String()].TTL -= 1
+	a.db[id].TTL -= 1
 	return nil
 }
 

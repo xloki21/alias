@@ -50,7 +50,7 @@ func (a *AliasRepository) SaveMany(ctx context.Context, aliases []*domain.Alias)
 	documents := make([]interface{}, len(aliases))
 	for index := range aliases {
 		documents[index] = bson.D{
-			{"alias", aliases[index].URL},
+			{"alias", aliases[index].URL.Path},
 			{"origin", aliases[index].Origin},
 			{"is_active", aliases[index].IsActive},
 			{"is_permanent", aliases[index].IsPermanent},
@@ -70,15 +70,16 @@ func (a *AliasRepository) SaveMany(ctx context.Context, aliases []*domain.Alias)
 // FindOne gets the target link from the shortened one
 func (a *AliasRepository) FindOne(ctx context.Context, alias *domain.Alias) error {
 	const fn = "mongodb::FindOne"
+	id := alias.URL.Path
 	zap.S().Infow("repo",
 		zap.String("name", "AliasRepository"),
 		zap.String("fn", fn),
-		zap.String("alias", alias.URL.String()))
+		zap.String("id", id))
 
 	filter := bson.M{
 		"$and": []bson.M{
 			{"is_active": true},
-			{"alias": alias.URL},
+			{"alias": id},
 		},
 	}
 
@@ -106,16 +107,17 @@ func (a *AliasRepository) FindOne(ctx context.Context, alias *domain.Alias) erro
 // DecreaseTTLCounter decreases the alias redirect counter
 func (a *AliasRepository) DecreaseTTLCounter(ctx context.Context, alias domain.Alias) error {
 	const fn = "mongodb::DecreaseTTLCounter"
+	id := alias.URL.Path
 	zap.S().Infow("repo",
 		zap.String("name", "AliasRepository"),
 		zap.String("fn", fn),
-		zap.String("alias", alias.URL.String()))
+		zap.String("id", id))
 
 	if alias.TTL == 0 {
 		return domain.ErrAliasExpired
 	}
 
-	filter := bson.M{"alias": alias.URL, "is_active": true}
+	filter := bson.M{"alias": id, "is_active": true}
 
 	pipeline := bson.A{
 		bson.M{
@@ -141,12 +143,13 @@ func (a *AliasRepository) DecreaseTTLCounter(ctx context.Context, alias domain.A
 // RemoveOne deletes a shortened link
 func (a *AliasRepository) RemoveOne(ctx context.Context, alias *domain.Alias) error {
 	const fn = "mongodb::RemoveOne"
+	id := alias.URL.Path
 	zap.S().Infow("repo",
 		zap.String("name", "AliasRepository"),
 		zap.String("fn", fn),
-		zap.String("alias", alias.URL.String()))
+		zap.String("id", id))
 
-	filter := bson.M{"alias": alias.URL, "is_active": true}
+	filter := bson.M{"alias": id, "is_active": true}
 	update := bson.M{"$set": bson.M{"is_active": false}}
 
 	result := a.collection.FindOneAndUpdate(ctx, filter, update)

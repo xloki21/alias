@@ -52,53 +52,6 @@ func (s *AliasManagerService) processEvent(ctx context.Context, msg any) {
 
 }
 
-//func (s *AliasLifeCycleService) ProcessEvents(ctx context.Context) error {
-//	const fn = "AliasLifeCycleService::ProcessEvents"
-//
-//	for {
-//		select {
-//		case message := <-s.eventQueue:
-//			switch message.(type) {
-//
-//			case domain.URLExpired:
-//				event := message.(domain.URLExpired)
-//				zap.S().Infow("service",
-//					zap.String("name", s.Name()),
-//					zap.String("fn", fn),
-//					zap.String("received", event.String()),
-//				)
-//
-//				err := s.statsRepo.PushStats(ctx, event)
-//				if err != nil {
-//					zap.S().Errorw("service",
-//						zap.String("name", s.Name()),
-//						zap.String("fn", fn),
-//						zap.String("error", err.Error()))
-//				}
-//
-//			case domain.AliasLinkRedirected:
-//				event := message.(domain.AliasLinkRedirected)
-//
-//				zap.S().Infow("service",
-//					zap.String("name", s.Name()),
-//					zap.String("fn", fn),
-//					zap.String("received", event.String()),
-//				)
-//
-//				if !event.IsPermanent {
-//					if err := s.aliasRepo.DecreaseTTLCounter(ctx, event.Alias); err != nil {
-//						zap.S().Errorw("service",
-//							zap.String("name", s.Name()),
-//							zap.String("fn", fn),
-//							zap.String("error", err.Error()))
-//					}
-//				}
-//			default:
-//			}
-//		}
-//	}
-//}
-
 func NewAliasManagerService(aliasRepo aliasRepository, eventQueue msgbroker.Queue) *AliasManagerService {
 	return &AliasManagerService{
 		consumer:  eventQueue,
