@@ -154,7 +154,7 @@ func (ac *AliasController) Redirect(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	http.Redirect(w, r, alias.Origin.String(), http.StatusPermanentRedirect)
+	http.Redirect(w, r, alias.Origin.String(), http.StatusTemporaryRedirect)
 }
 
 func (ac *AliasController) RemoveAlias(w http.ResponseWriter, r *http.Request) {

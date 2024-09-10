@@ -18,7 +18,7 @@ const (
 	StatsCollectionName = "stats"
 )
 
-// aliasDocument is DTO for alias collection
+// aliasDocument is DTO for AliasCollectionName collection
 type aliasDocument struct {
 	ID          string   `bson:"_id"`
 	Origin      *url.URL `bson:"origin"`
