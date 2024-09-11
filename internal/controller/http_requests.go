@@ -1,7 +1,7 @@
 package controller
 
-type requestSingleURL struct {
-	URL string `json:"url"`
+type requestDeleteAlias struct {
+	Key string `json:"key"`
 }
 
 type requestURLList struct {

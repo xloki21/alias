@@ -9,7 +9,7 @@ import (
 type Alias struct {
 	ID          string
 	Origin      *url.URL
-	URL         *url.URL
+	Key         string
 	TTL         int
 	IsActive    bool
 	IsPermanent bool

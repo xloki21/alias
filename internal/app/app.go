@@ -97,7 +97,7 @@ func New(cfg config.AppConfig) (*Application, error) {
 		aliasStatsSvc := stats.NewAliasStatisticsService(statsRepoMongoDB, aliasExpiredQ)
 		aliasStatsSvc.Process(ctx)
 
-		aliasService = link.NewAliasService(aliasExpiredQ, aliasUsedQ, aliasRepoMongoDB, baseURLPrefix)
+		aliasService = link.NewAliasService(aliasExpiredQ, aliasUsedQ, aliasRepoMongoDB)
 
 	case repository.InMemory:
 		zap.S().Info("using in-memory storage type")
@@ -110,14 +110,14 @@ func New(cfg config.AppConfig) (*Application, error) {
 		aliasStatsSvc := stats.NewAliasStatisticsService(statsRepoInMemory, aliasExpiredQ)
 		aliasStatsSvc.Process(ctx)
 
-		aliasService = link.NewAliasService(aliasExpiredQ, aliasUsedQ, aliasRepoInMemory, baseURLPrefix)
+		aliasService = link.NewAliasService(aliasExpiredQ, aliasUsedQ, aliasRepoInMemory)
 
 	default:
 		zap.S().Fatalf("unknown storage type: %s", cfg.Storage.Type)
 		return nil, domain.ErrUnknownStorageType
 	}
 
-	ctrl := controller.NewAliasController(aliasService)
+	ctrl := controller.NewAliasController(aliasService, baseURLPrefix)
 
 	app := &Application{
 		address:    cfg.Server.Address,

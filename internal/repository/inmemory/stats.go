@@ -11,7 +11,7 @@ import (
 
 type eventStat struct {
 	OccurredAt time.Time
-	URL        *url.URL
+	Key        string
 	Origin     *url.URL
 }
 
@@ -38,9 +38,9 @@ func (r *AliasStatsRepository) PushStats(ctx context.Context, event domain.Alias
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	r.db[event.URL.String()] = eventStat{
+	r.db[event.Key] = eventStat{
 		OccurredAt: event.OccurredAt,
-		URL:        event.URL,
+		Key:        event.Key,
 		Origin:     event.Origin,
 	}
 	return nil
