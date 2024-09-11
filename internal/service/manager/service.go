@@ -3,7 +3,6 @@ package manager
 import (
 	"context"
 	"github.com/xloki21/alias/internal/domain"
-	"github.com/xloki21/alias/internal/infrastructure/msgbroker"
 	"go.uber.org/zap"
 )
 
@@ -52,9 +51,9 @@ func (s *AliasManagerService) processEvent(ctx context.Context, msg any) {
 
 }
 
-func NewAliasManagerService(aliasRepo aliasRepository, eventQueue msgbroker.Queue) *AliasManagerService {
+func NewAliasManagerService(aliasRepo aliasRepository, consumer eventConsumer) *AliasManagerService {
 	return &AliasManagerService{
-		consumer:  eventQueue,
+		consumer:  consumer,
 		aliasRepo: aliasRepo,
 	}
 }

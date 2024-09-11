@@ -3,7 +3,6 @@ package stats
 import (
 	"context"
 	"github.com/xloki21/alias/internal/domain"
-	"github.com/xloki21/alias/internal/infrastructure/msgbroker"
 	"go.uber.org/zap"
 )
 
@@ -50,9 +49,9 @@ func (s *AliasStatisticsService) processEvent(ctx context.Context, msg any) {
 	}
 }
 
-func NewAliasStatisticsService(statsRepo statsRepository, eventQueue msgbroker.Queue) *AliasStatisticsService {
+func NewAliasStatisticsService(statsRepo statsRepository, consumer eventConsumer) *AliasStatisticsService {
 	return &AliasStatisticsService{
-		consumer:  eventQueue,
+		consumer:  consumer,
 		statsRepo: statsRepo,
 	}
 }
