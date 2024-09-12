@@ -11,32 +11,32 @@ import (
 
 type eventDocument struct {
 	OccurredAt time.Time `bson:"occurred_at"` // time when event occurred
-	URL        *url.URL  `bson:"url"`
+	Key        string    `bson:"key"`
 	Origin     *url.URL  `bson:"origin"`
 }
 
-type ExpiredURLStatsRepository struct {
+type AliasStatsRepository struct {
 	collection *mongo.Collection
 }
 
-// NewExpiredURLStatsRepository creates a new ExpiredURLStatsRepository
-func NewExpiredURLStatsRepository(collection *mongo.Collection) *ExpiredURLStatsRepository {
-	return &ExpiredURLStatsRepository{
+// NewAliasStatsRepository creates a new AliasStatsRepository
+func NewAliasStatsRepository(collection *mongo.Collection) *AliasStatsRepository {
+	return &AliasStatsRepository{
 		collection: collection,
 	}
 }
 
 // PushStats pushes data with statistics into collection
-func (r *ExpiredURLStatsRepository) PushStats(ctx context.Context, event domain.URLExpired) error {
+func (r *AliasStatsRepository) PushStats(ctx context.Context, event domain.AliasExpired) error {
 	const fn = "mongodb::PushEvent"
 	zap.S().Infow("repo",
-		zap.String("name", "ExpiredURLStatsRepository"),
+		zap.String("name", "NewAliasStatsRepository"),
 		zap.String("fn", fn),
 		zap.String("event", event.String()),
 	)
 	newEventDoc := eventDocument{
 		OccurredAt: event.OccurredAt,
-		URL:        event.URL,
+		Key:        event.Key,
 		Origin:     event.Origin,
 	}
 

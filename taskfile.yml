@@ -1,0 +1,21 @@
+version: '3'
+
+tasks:
+  build:
+    desc: Build app
+    cmd: go build -o aliassrv -v ./cmd/main.go
+  mongodb:
+    desc: Start MongoDB container
+    cmd: docker compose --profile=mongodb up mongodb -d
+  docker:
+    desc: Build docker image
+    cmd: docker build . -t alias:v1.0.0beta
+  integration-test:
+    desc: Run integration tests
+    cmds:
+      - go clean -testcache
+      - go test -tags=integration -v ./internal/tests/...
+  e2e-test:
+    desc: Run e2e tests
+    cmds:
+      - go test -tags=e2e -v ./internal/tests/...

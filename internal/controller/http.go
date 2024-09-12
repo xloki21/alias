@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/xloki21/alias/internal/domain"
 	"io"
 	"net/http"
@@ -15,18 +16,18 @@ import (
 const maxGoroutines = 10
 
 type aliasService interface {
-	CreateOne(ctx context.Context, alias *domain.Alias) error
 	CreateMany(ctx context.Context, aliases []*domain.Alias) error
 	FindOne(ctx context.Context, linkID string) (*domain.Alias, error)
 	RemoveOne(ctx context.Context, alias *domain.Alias) error
 }
 
 type AliasController struct {
+	address string
 	service aliasService
 }
 
-func NewAliasController(service aliasService) *AliasController {
-	return &AliasController{service: service}
+func NewAliasController(service aliasService, address string) *AliasController {
+	return &AliasController{service: service, address: address}
 }
 
 func (ac *AliasController) CreateAlias(w http.ResponseWriter, r *http.Request) {
@@ -120,7 +121,7 @@ func (ac *AliasController) CreateAlias(w http.ResponseWriter, r *http.Request) {
 
 	response := responseURLList{URLs: make([]string, len(payload.URLs))}
 	for index := range aliases {
-		response.URLs[index] = aliases[index].URL.String()
+		response.URLs[index] = fmt.Sprintf("%s/%s", ac.address, aliases[index].Key)
 	}
 
 	answer, err := json.Marshal(response)
@@ -155,7 +156,7 @@ func (ac *AliasController) Redirect(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	http.Redirect(w, r, alias.Origin.String(), http.StatusPermanentRedirect)
+	http.Redirect(w, r, alias.Origin.String(), http.StatusTemporaryRedirect)
 }
 
 func (ac *AliasController) RemoveAlias(w http.ResponseWriter, r *http.Request) {
@@ -170,19 +171,13 @@ func (ac *AliasController) RemoveAlias(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	payload := &requestSingleURL{}
+	payload := &requestDeleteAlias{}
 	if err := json.Unmarshal(content, payload); err != nil {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
 
-	validURL, err := url.Parse(payload.URL)
-	if err != nil {
-		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
-		return
-	}
-
-	alias := domain.Alias{URL: validURL}
+	alias := domain.Alias{Key: payload.Key}
 	if err := ac.service.RemoveOne(r.Context(), &alias); err != nil {
 		if errors.Is(err, domain.ErrAliasNotFound) {
 			http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)

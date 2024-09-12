@@ -5,21 +5,22 @@ import (
 	"time"
 )
 
-// AliasLinkRedirected is a struct that represents an alias link redirect event.
-type AliasLinkRedirected struct {
+// AliasUsed is a struct that represents an alias link redirect event.
+type AliasUsed struct {
 	Alias
 	OccurredAt time.Time
 }
 
-func (a AliasLinkRedirected) String() string {
-	return fmt.Sprintf("%s: %s", "AliasLinkRedirected", a.URL)
+func (a AliasUsed) String() string {
+	return fmt.Sprintf("%s: %s", "AliasUsed", a.Key)
 }
 
-type URLExpired struct {
+// AliasExpired is a struct that represents an alias link expired event.
+type AliasExpired struct {
 	Alias
 	OccurredAt time.Time
 }
 
-func (u URLExpired) String() string {
-	return fmt.Sprintf("%s: %s", "URLExpired", u.URL)
+func (u AliasExpired) String() string {
+	return fmt.Sprintf("%s: %s", "AliasExpired", u.Key)
 }

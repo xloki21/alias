@@ -11,24 +11,24 @@ import (
 
 type eventStat struct {
 	OccurredAt time.Time
-	URL        *url.URL
+	Key        string
 	Origin     *url.URL
 }
 
-type ExpiredURLStatsRepository struct {
+type AliasStatsRepository struct {
 	db map[string]eventStat
 	mu sync.RWMutex
 }
 
-// NewExpiredURLStatsRepository creates a new ExpiredURLStatsRepository
-func NewExpiredURLStatsRepository() *ExpiredURLStatsRepository {
-	return &ExpiredURLStatsRepository{
+// NewAliasStatsRepository creates a new AliasStatsRepository
+func NewAliasStatsRepository() *AliasStatsRepository {
+	return &AliasStatsRepository{
 		db: make(map[string]eventStat),
 	}
 }
 
 // PushStats pushes data with statistics into collection
-func (r *ExpiredURLStatsRepository) PushStats(ctx context.Context, event domain.URLExpired) error {
+func (r *AliasStatsRepository) PushStats(ctx context.Context, event domain.AliasExpired) error {
 	const fn = "in-memory::PushStats"
 	zap.S().Infow("repo",
 		zap.String("name", "ExpiredURLStatsRepository"),
@@ -38,9 +38,9 @@ func (r *ExpiredURLStatsRepository) PushStats(ctx context.Context, event domain.
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	r.db[event.URL.String()] = eventStat{
+	r.db[event.Key] = eventStat{
 		OccurredAt: event.OccurredAt,
-		URL:        event.URL,
+		Key:        event.Key,
 		Origin:     event.Origin,
 	}
 	return nil

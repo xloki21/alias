@@ -6,7 +6,6 @@ import (
 	"github.com/xloki21/alias/internal/domain"
 	"github.com/xloki21/alias/pkg/randomizer"
 	"go.uber.org/zap"
-	"net/url"
 	"sync"
 )
 
@@ -15,51 +14,26 @@ const (
 	randomSuffixLength = 7
 )
 
+//go:generate mockery --name=aliasRepo --exported --output ./mocks --filename=alias_repo.go
 type aliasRepo interface {
-	SaveOne(ctx context.Context, alias *domain.Alias) error
 	SaveMany(ctx context.Context, aliases []*domain.Alias) error
 	FindOne(ctx context.Context, alias *domain.Alias) error
 	RemoveOne(ctx context.Context, alias *domain.Alias) error
 }
 
-type eventPublisher interface {
-	Publish(ctx context.Context, event interface{}) error
+//go:generate mockery --name=eventProducer  --exported --output ./mocks --filename=event_producer.go
+type eventProducer interface {
+	Produce(event any)
 }
 
 type AliasService struct {
-	baseURLPrefix string
 	repo          aliasRepo
-	publisher     eventPublisher
+	aliasExpiredQ eventProducer
+	aliasUsedQ    eventProducer
 }
 
 func (s *AliasService) Name() string {
 	return "AliasService"
-}
-
-// CreateOne creates a shortened link for the given origin
-func (s *AliasService) CreateOne(ctx context.Context, alias *domain.Alias) error {
-	const fn = "AliasService::CreateOne"
-	zap.S().Infow("service",
-		zap.String("name", s.Name()),
-		zap.String("fn", fn),
-		zap.String("origin", alias.Origin.String()))
-
-	suffix, err := randomizer.GenerateRandomStringURLSafe(randomSuffixLength)
-	if err != nil {
-		return err
-	}
-
-	validURL, err := url.Parse(fmt.Sprintf("%s/%s", s.baseURLPrefix, suffix))
-	if err != nil {
-		return err
-	}
-
-	alias.URL = validURL
-
-	if err := s.repo.SaveOne(ctx, alias); err != nil {
-		return fmt.Errorf("%s: %w", fn, err)
-	}
-	return nil
 }
 
 // CreateMany creates a set of shortened links for the given origin links
@@ -81,17 +55,18 @@ func (s *AliasService) CreateMany(ctx context.Context, aliases []*domain.Alias) 
 		go func(index int) {
 			defer wg.Done()
 
-			suffix, err := randomizer.GenerateRandomStringURLSafe(randomSuffixLength)
+			key, err := randomizer.GenerateRandomStringURLSafe(randomSuffixLength)
 			if err != nil {
 				errChan <- fmt.Errorf("%s: %w", fn, err)
 			}
-			validURL, err := url.Parse(fmt.Sprintf("%s/%s", s.baseURLPrefix, suffix))
-			if err != nil {
-				errChan <- fmt.Errorf("%s: %w", fn, err)
-				return
-			}
+			//validURL, err := url.Parse(fmt.Sprintf("%s/%s", s.baseURLPrefix, key))
+			//if err != nil {
+			//	errChan <- fmt.Errorf("%s: %w", fn, err)
+			//	return
+			//}
 
-			aliases[index].URL = validURL
+			//aliases[index].URL = validURL
+			aliases[index].Key = key
 			aliases[index].IsActive = true
 		}(index)
 		<-semaphore
@@ -115,17 +90,15 @@ func (s *AliasService) CreateMany(ctx context.Context, aliases []*domain.Alias) 
 }
 
 // FindOne finds the alias link
-func (s *AliasService) FindOne(ctx context.Context, linkID string) (*domain.Alias, error) {
+func (s *AliasService) FindOne(ctx context.Context, key string) (*domain.Alias, error) {
 	const fn = "AliasService::FindOne"
 
 	zap.S().Infow("service",
 		zap.String("name", s.Name()),
 		zap.String("fn", fn),
-		zap.String("id", linkID))
+		zap.String("key", key))
 
-	urlString := fmt.Sprintf("%s/%s", s.baseURLPrefix, linkID)
-	validURL, _ := url.Parse(urlString)
-	alias := &domain.Alias{URL: validURL}
+	alias := &domain.Alias{Key: key}
 
 	if err := s.repo.FindOne(ctx, alias); err != nil {
 		return nil, fmt.Errorf("%s: %w", fn, err)
@@ -138,9 +111,9 @@ func (s *AliasService) FindOne(ctx context.Context, linkID string) (*domain.Alia
 	// check if alias is expired and send event with publisher
 	if alias.TTL == 0 {
 		event := alias.Expired()
-		if err := s.publisher.Publish(ctx, event); err != nil {
-			return nil, err
-		}
+
+		s.aliasExpiredQ.Produce(event)
+
 		zap.S().Infow("service",
 			zap.String("name", s.Name()),
 			zap.String("fn", fn),
@@ -157,9 +130,9 @@ func (s *AliasService) FindOne(ctx context.Context, linkID string) (*domain.Alia
 
 	// publish event
 	event := alias.Redirected()
-	if err := s.publisher.Publish(ctx, event); err != nil {
-		return nil, err
-	}
+
+	s.aliasUsedQ.Produce(event)
+
 	zap.S().Infow("service",
 		zap.String("name", s.Name()),
 		zap.String("fn", fn),
@@ -175,7 +148,7 @@ func (s *AliasService) RemoveOne(ctx context.Context, alias *domain.Alias) error
 	zap.S().Infow("service",
 		zap.String("name", s.Name()),
 		zap.String("fn", fn),
-		zap.String("alias", alias.URL.String()))
+		zap.String("key", alias.Key))
 
 	if err := s.repo.RemoveOne(ctx, alias); err != nil {
 		return fmt.Errorf("%s: %w", fn, err)
@@ -185,10 +158,10 @@ func (s *AliasService) RemoveOne(ctx context.Context, alias *domain.Alias) error
 }
 
 // NewAliasService creates a new alias service
-func NewAliasService(publisher eventPublisher, repo aliasRepo, urlPrefix string) *AliasService {
+func NewAliasService(aliasExpiredQ eventProducer, aliasUsedQ eventProducer, repo aliasRepo) *AliasService {
 	return &AliasService{
-		baseURLPrefix: urlPrefix,
-		publisher:     publisher,
+		aliasExpiredQ: aliasExpiredQ,
+		aliasUsedQ:    aliasUsedQ,
 		repo:          repo,
 	}
 }

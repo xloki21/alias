@@ -13,7 +13,12 @@ import (
 	"net/url"
 )
 
-// aliasDocument is DTO for alias collection
+const (
+	AliasCollectionName = "aliases"
+	StatsCollectionName = "stats"
+)
+
+// aliasDocument is DTO for AliasCollectionName collection
 type aliasDocument struct {
 	ID          string   `bson:"_id"`
 	Origin      *url.URL `bson:"origin"`
@@ -34,30 +39,6 @@ func NewMongoDBAliasRepository(collection *mongo.Collection) *AliasRepository {
 	}
 }
 
-// SaveOne saves a alias link
-func (a *AliasRepository) SaveOne(ctx context.Context, alias *domain.Alias) error {
-	const fn = "mongodb::SaveOne"
-	zap.S().Infow("repo",
-		zap.String("name", "AliasRepository"),
-		zap.String("fn", fn),
-		zap.String("alias", alias.URL.String()),
-		zap.String("origin", alias.Origin.String()))
-
-	document := bson.D{
-		{"alias", alias.URL},
-		{"origin", alias.Origin},
-		{"is_active", alias.IsActive},
-		{"is_permanent", alias.IsPermanent},
-		{"TTL", alias.TTL},
-	}
-	opStatus, err := a.collection.InsertOne(ctx, document)
-	if err != nil {
-		return err
-	}
-	alias.ID = opStatus.InsertedID.(primitive.ObjectID).Hex()
-	return nil
-}
-
 // SaveMany saves many aliases in bulk
 func (a *AliasRepository) SaveMany(ctx context.Context, aliases []*domain.Alias) error {
 	const fn = "mongodb::SaveMany"
@@ -69,7 +50,7 @@ func (a *AliasRepository) SaveMany(ctx context.Context, aliases []*domain.Alias)
 	documents := make([]interface{}, len(aliases))
 	for index := range aliases {
 		documents[index] = bson.D{
-			{"alias", aliases[index].URL},
+			{"key", aliases[index].Key},
 			{"origin", aliases[index].Origin},
 			{"is_active", aliases[index].IsActive},
 			{"is_permanent", aliases[index].IsPermanent},
@@ -92,12 +73,12 @@ func (a *AliasRepository) FindOne(ctx context.Context, alias *domain.Alias) erro
 	zap.S().Infow("repo",
 		zap.String("name", "AliasRepository"),
 		zap.String("fn", fn),
-		zap.String("alias", alias.URL.String()))
+		zap.String("key", alias.Key))
 
 	filter := bson.M{
 		"$and": []bson.M{
 			{"is_active": true},
-			{"alias": alias.URL},
+			{"key": alias.Key},
 		},
 	}
 
@@ -128,13 +109,13 @@ func (a *AliasRepository) DecreaseTTLCounter(ctx context.Context, alias domain.A
 	zap.S().Infow("repo",
 		zap.String("name", "AliasRepository"),
 		zap.String("fn", fn),
-		zap.String("alias", alias.URL.String()))
+		zap.String("key", alias.Key))
 
 	if alias.TTL == 0 {
 		return domain.ErrAliasExpired
 	}
 
-	filter := bson.M{"alias": alias.URL, "is_active": true}
+	filter := bson.M{"key": alias.Key, "is_active": true}
 
 	pipeline := bson.A{
 		bson.M{
@@ -163,9 +144,9 @@ func (a *AliasRepository) RemoveOne(ctx context.Context, alias *domain.Alias) er
 	zap.S().Infow("repo",
 		zap.String("name", "AliasRepository"),
 		zap.String("fn", fn),
-		zap.String("alias", alias.URL.String()))
+		zap.String("key", alias.Key))
 
-	filter := bson.M{"alias": alias.URL, "is_active": true}
+	filter := bson.M{"key": alias.Key, "is_active": true}
 	update := bson.M{"$set": bson.M{"is_active": false}}
 
 	result := a.collection.FindOneAndUpdate(ctx, filter, update)

@@ -9,7 +9,7 @@ import (
 type Alias struct {
 	ID          string
 	Origin      *url.URL
-	URL         *url.URL
+	Key         string
 	TTL         int
 	IsActive    bool
 	IsPermanent bool
@@ -23,16 +23,16 @@ func (a Alias) Type() string {
 }
 
 // Redirected is a function that creates an AliasLinkRedirected event.
-func (a Alias) Redirected() AliasLinkRedirected {
-	return AliasLinkRedirected{
+func (a Alias) Redirected() AliasUsed {
+	return AliasUsed{
 		Alias:      a,
 		OccurredAt: time.Now(),
 	}
 }
 
 // Expired is a function that creates an URLExpired event.
-func (a Alias) Expired() URLExpired {
-	return URLExpired{
+func (a Alias) Expired() AliasExpired {
+	return AliasExpired{
 		Alias:      a,
 		OccurredAt: time.Now(),
 	}

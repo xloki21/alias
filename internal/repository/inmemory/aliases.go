@@ -12,22 +12,6 @@ type AliasRepository struct {
 	db map[string]*domain.Alias
 }
 
-// SaveOne saves a alias link
-func (a *AliasRepository) SaveOne(ctx context.Context, alias *domain.Alias) error {
-	const fn = "in-memory::SaveOne"
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	zap.S().Infow("repo",
-		zap.String("name", "AliasRepository"),
-		zap.String("fn", fn),
-		zap.String("alias", alias.URL.String()),
-		zap.String("origin", alias.Origin.String()))
-	id := alias.URL.String()
-	alias.ID = id
-	a.db[id] = alias
-	return nil
-}
-
 // SaveMany saves many aliases in one run
 func (a *AliasRepository) SaveMany(ctx context.Context, aliases []*domain.Alias) error {
 	const fn = "in-memory::SaveMany"
@@ -38,7 +22,7 @@ func (a *AliasRepository) SaveMany(ctx context.Context, aliases []*domain.Alias)
 		zap.String("fn", fn),
 		zap.Int("alias count", len(aliases)))
 	for index := range aliases {
-		id := aliases[index].URL.String()
+		id := aliases[index].Key
 		aliases[index].ID = id
 
 		a.db[id] = aliases[index]
@@ -52,11 +36,11 @@ func (a *AliasRepository) FindOne(ctx context.Context, alias *domain.Alias) erro
 	zap.S().Infow("repo",
 		zap.String("name", "AliasRepository"),
 		zap.String("fn", fn),
-		zap.String("alias", alias.URL.String()))
+		zap.String("key", alias.Key))
 
 	a.mu.RLock()
 	defer a.mu.RUnlock()
-	if presented, ok := a.db[alias.URL.String()]; ok {
+	if presented, ok := a.db[alias.Key]; ok {
 		*alias = *presented
 		return nil
 	} else {
@@ -70,11 +54,11 @@ func (a *AliasRepository) RemoveOne(ctx context.Context, alias *domain.Alias) er
 	zap.S().Infow("repo",
 		zap.String("name", "AliasRepository"),
 		zap.String("fn", fn),
-		zap.String("alias", alias.URL.String()))
+		zap.String("key", alias.Key))
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if _, ok := a.db[alias.URL.String()]; ok {
-		delete(a.db, alias.URL.String())
+	if _, ok := a.db[alias.Key]; ok {
+		delete(a.db, alias.Key)
 		return nil
 	} else {
 		return domain.ErrAliasNotFound
@@ -86,7 +70,7 @@ func (a *AliasRepository) DecreaseTTLCounter(ctx context.Context, alias domain.A
 	zap.S().Infow("repo",
 		zap.String("name", "AliasRepository"),
 		zap.String("fn", fn),
-		zap.String("alias", alias.URL.String()))
+		zap.String("id", alias.Key))
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -94,12 +78,12 @@ func (a *AliasRepository) DecreaseTTLCounter(ctx context.Context, alias domain.A
 		return domain.ErrAliasExpired
 	}
 
-	if _, ok := a.db[alias.URL.String()]; !ok { // check: possibly unnecessary
+	if _, ok := a.db[alias.Key]; !ok { // check: possibly unnecessary
 		return domain.ErrAliasNotFound
 	}
 
 	// decrease TTL counter
-	a.db[alias.URL.String()].TTL -= 1
+	a.db[alias.Key].TTL -= 1
 	return nil
 }
 
