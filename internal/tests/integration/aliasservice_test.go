@@ -2,7 +2,6 @@ package integration
 
 import (
 	"context"
-	"fmt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
@@ -20,12 +19,35 @@ import (
 	"testing"
 )
 
-const tag = "7.0.6"
+const mongoDockerImage = "mongo:7.0.6"
+
+type TestHelper struct {
+	service *link.AliasService
+	repo    *mongodb.AliasRepository
+}
+
+func NewTestHelper(ctx context.Context, db *mongo.Database) *TestHelper {
+	aliasUsedQ := squeue.New()
+	aliasExpiredQ := squeue.New()
+
+	aliasRepoMongoDB := mongodb.NewMongoDBAliasRepository(db.Collection(mongodb.AliasCollectionName))
+	statsRepoMongoDB := mongodb.NewAliasStatsRepository(db.Collection(mongodb.StatsCollectionName))
+	aliasManagerSvc := manager.NewAliasManagerService(aliasRepoMongoDB, aliasUsedQ)
+	aliasManagerSvc.Process(ctx)
+
+	aliasStatsSvc := stats.NewAliasStatisticsService(statsRepoMongoDB, aliasExpiredQ)
+	aliasStatsSvc.Process(ctx)
+
+	return &TestHelper{
+		service: link.NewAliasService(aliasExpiredQ, aliasUsedQ, aliasRepoMongoDB),
+		repo:    aliasRepoMongoDB,
+	}
+}
 
 func setupMongoDBContainer(t *testing.T) (testcontainers.Container, *mongo.Database) {
 	ctx := context.Background()
 
-	mongodbContainer, err := tc.Run(ctx, fmt.Sprintf("mongo:%s", tag))
+	mongodbContainer, err := tc.Run(ctx, mongoDockerImage)
 	require.NoError(t, err)
 
 	connstr, err := mongodbContainer.ConnectionString(ctx)
@@ -63,18 +85,7 @@ func TestAliasServiceCreateManyMongoDB(t *testing.T) {
 		require.NoError(t, err)
 	}(container, ctx)
 
-	aliasUsedQ := squeue.New()
-	aliasExpiredQ := squeue.New()
-
-	aliasRepoMongoDB := mongodb.NewMongoDBAliasRepository(db.Collection(mongodb.AliasCollectionName))
-	statsRepoMongoDB := mongodb.NewAliasStatsRepository(db.Collection(mongodb.StatsCollectionName))
-	aliasManagerSvc := manager.NewAliasManagerService(aliasRepoMongoDB, aliasUsedQ)
-	aliasManagerSvc.Process(ctx)
-
-	aliasStatsSvc := stats.NewAliasStatisticsService(statsRepoMongoDB, aliasExpiredQ)
-	aliasStatsSvc.Process(ctx)
-
-	aliasService := link.NewAliasService(aliasExpiredQ, aliasUsedQ, aliasRepoMongoDB)
+	th := NewTestHelper(ctx, db)
 
 	type args struct {
 		ctx     context.Context
@@ -95,7 +106,7 @@ func TestAliasServiceCreateManyMongoDB(t *testing.T) {
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			assert.NoError(t, aliasService.CreateMany(testCase.args.ctx, testCase.args.aliases))
+			assert.NoError(t, th.service.CreateMany(testCase.args.ctx, testCase.args.aliases))
 
 			for _, arg := range testCase.args.aliases {
 				foundOne := &domain.Alias{
@@ -103,7 +114,7 @@ func TestAliasServiceCreateManyMongoDB(t *testing.T) {
 					IsActive: true,
 				}
 
-				err := aliasRepoMongoDB.FindOne(ctx, foundOne)
+				err := th.repo.FindOne(ctx, foundOne)
 				if assert.NoError(t, err) {
 					assert.Equal(t, arg, foundOne)
 				}
@@ -121,18 +132,7 @@ func TestAliasServiceFindOneMongoDB(t *testing.T) {
 		require.NoError(t, err)
 	}(container, ctx)
 
-	aliasUsedQ := squeue.New()
-	aliasExpiredQ := squeue.New()
-
-	aliasRepoMongoDB := mongodb.NewMongoDBAliasRepository(db.Collection(mongodb.AliasCollectionName))
-	statsRepoMongoDB := mongodb.NewAliasStatsRepository(db.Collection(mongodb.StatsCollectionName))
-	aliasManagerSvc := manager.NewAliasManagerService(aliasRepoMongoDB, aliasUsedQ)
-	aliasManagerSvc.Process(ctx)
-
-	aliasStatsSvc := stats.NewAliasStatisticsService(statsRepoMongoDB, aliasExpiredQ)
-	aliasStatsSvc.Process(ctx)
-
-	aliasService := link.NewAliasService(aliasExpiredQ, aliasUsedQ, aliasRepoMongoDB)
+	th := NewTestHelper(ctx, db)
 
 	type args struct {
 		ctx context.Context
@@ -159,9 +159,9 @@ func TestAliasServiceFindOneMongoDB(t *testing.T) {
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
 			aliases := link.TestURLSet(t, 2000)
-			assert.NoError(t, aliasService.CreateMany(ctx, aliases))
+			assert.NoError(t, th.service.CreateMany(ctx, aliases))
 
-			got, err := aliasService.FindOne(ctx, testCase.args.key)
+			got, err := th.service.FindOne(ctx, testCase.args.key)
 			assert.ErrorIs(t, err, testCase.expectedErr)
 			assert.Equal(t, got, testCase.wants)
 		})
@@ -177,18 +177,7 @@ func TestAliasServiceRemoveOneMongoDB(t *testing.T) {
 		require.NoError(t, err)
 	}(container, ctx)
 
-	aliasUsedQ := squeue.New()
-	aliasExpiredQ := squeue.New()
-
-	aliasRepoMongoDB := mongodb.NewMongoDBAliasRepository(db.Collection(mongodb.AliasCollectionName))
-	statsRepoMongoDB := mongodb.NewAliasStatsRepository(db.Collection(mongodb.StatsCollectionName))
-	aliasManagerSvc := manager.NewAliasManagerService(aliasRepoMongoDB, aliasUsedQ)
-	aliasManagerSvc.Process(ctx)
-
-	aliasStatsSvc := stats.NewAliasStatisticsService(statsRepoMongoDB, aliasExpiredQ)
-	aliasStatsSvc.Process(ctx)
-
-	aliasService := link.NewAliasService(aliasExpiredQ, aliasUsedQ, aliasRepoMongoDB)
+	th := NewTestHelper(ctx, db)
 
 	type args struct {
 		ctx   context.Context
@@ -212,7 +201,7 @@ func TestAliasServiceRemoveOneMongoDB(t *testing.T) {
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
 
-			err := aliasService.RemoveOne(testCase.args.ctx, testCase.args.alias)
+			err := th.service.RemoveOne(testCase.args.ctx, testCase.args.alias)
 			assert.ErrorIs(t, err, testCase.expectedErr)
 		})
 	}
