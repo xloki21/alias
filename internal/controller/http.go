@@ -171,7 +171,7 @@ func (ac *AliasController) RemoveAlias(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	payload := &requestDeleteAlias{}
+	payload := new(requestDeleteAlias)
 	if err := json.Unmarshal(content, payload); err != nil {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return

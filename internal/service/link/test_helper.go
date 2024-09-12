@@ -2,12 +2,14 @@ package link
 
 import (
 	"fmt"
+	"github.com/stretchr/testify/require"
 	"github.com/xloki21/alias/internal/domain"
 	"math/rand"
 	"net/url"
+	"testing"
 )
 
-func TestURLSet(quantity int) []*domain.Alias {
+func TestURLSet(t *testing.T, quantity int) []*domain.Alias {
 	aliases := make([]*domain.Alias, quantity)
 	ttlValue := rand.Intn(10)
 	isPermanent := false
@@ -15,7 +17,8 @@ func TestURLSet(quantity int) []*domain.Alias {
 		isPermanent = true
 	}
 	rawUrlString := fmt.Sprintf("http://very-long-url-%d.test/path/to/somewhere", rand.Int())
-	validURL, _ := url.Parse(rawUrlString)
+	validURL, err := url.Parse(rawUrlString)
+	require.NoError(t, err)
 
 	for i := 0; i < quantity; i++ {
 		aliases[i] = &domain.Alias{
