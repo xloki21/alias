@@ -16,9 +16,9 @@ import (
 const maxGoroutines = 10
 
 type aliasService interface {
-	CreateMany(ctx context.Context, aliases []*domain.Alias) error
-	FindOne(ctx context.Context, linkID string) (*domain.Alias, error)
-	RemoveOne(ctx context.Context, alias *domain.Alias) error
+	CreateMany(ctx context.Context, requests []domain.AliasCreationRequest) ([]domain.Alias, error)
+	FindOne(ctx context.Context, key string) (*domain.Alias, error)
+	RemoveOne(ctx context.Context, key string) error
 }
 
 type AliasController struct {
@@ -39,7 +39,7 @@ func (ac *AliasController) CreateAlias(w http.ResponseWriter, r *http.Request) {
 	// parse query params
 	query := r.URL.Query()
 	var isPermanent bool
-	var TTLValue int
+	var triesLeftValue int
 	if maxUsageCount, ok := query["maxUsageCount"]; !ok {
 		isPermanent = true
 	} else {
@@ -52,7 +52,7 @@ func (ac *AliasController) CreateAlias(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 			return
 		}
-		TTLValue = int(value)
+		triesLeftValue = int(value)
 	}
 
 	content, err := io.ReadAll(r.Body)
@@ -69,8 +69,8 @@ func (ac *AliasController) CreateAlias(w http.ResponseWriter, r *http.Request) {
 
 	// helper struct to keep order of the validated URL's
 	type indexedResult struct {
-		index int
-		alias *domain.Alias
+		index   int
+		request domain.AliasCreationRequest
 	}
 
 	// validate request
@@ -87,11 +87,9 @@ func (ac *AliasController) CreateAlias(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				errChan <- err
 			}
-			resultChan <- indexedResult{index: index, alias: &domain.Alias{
-				Origin:      validURL,
-				TTL:         TTLValue,
-				IsActive:    true,
-				IsPermanent: isPermanent,
+			resultChan <- indexedResult{index: index, request: domain.AliasCreationRequest{
+				Params: domain.TTLParams{TriesLeft: triesLeftValue, IsPermanent: isPermanent},
+				URL:    validURL,
 			}}
 
 		}(index, urlString)
@@ -109,12 +107,13 @@ func (ac *AliasController) CreateAlias(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	aliases := make([]*domain.Alias, len(payload.URLs), len(payload.URLs))
-	for item := range resultChan {
-		aliases[item.index] = item.alias
+	requests := make([]domain.AliasCreationRequest, len(payload.URLs), len(payload.URLs))
+	for entry := range resultChan {
+		requests[entry.index] = entry.request
 	}
 
-	if err := ac.service.CreateMany(r.Context(), aliases); err != nil {
+	aliases, err := ac.service.CreateMany(r.Context(), requests)
+	if err != nil {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
@@ -144,8 +143,8 @@ func (ac *AliasController) Redirect(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 		return
 	}
-	linkID := r.PathValue("linkID")
-	alias, err := ac.service.FindOne(r.Context(), linkID)
+	key := r.PathValue("key")
+	alias, err := ac.service.FindOne(r.Context(), key)
 	if err != nil {
 		if errors.Is(err, domain.ErrAliasNotFound) {
 			http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
@@ -156,7 +155,8 @@ func (ac *AliasController) Redirect(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	http.Redirect(w, r, alias.Origin.String(), http.StatusTemporaryRedirect)
+
+	http.Redirect(w, r, alias.URL.String(), http.StatusTemporaryRedirect)
 }
 
 func (ac *AliasController) RemoveAlias(w http.ResponseWriter, r *http.Request) {
@@ -177,8 +177,7 @@ func (ac *AliasController) RemoveAlias(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	alias := domain.Alias{Key: payload.Key}
-	if err := ac.service.RemoveOne(r.Context(), &alias); err != nil {
+	if err := ac.service.RemoveOne(r.Context(), payload.Key); err != nil {
 		if errors.Is(err, domain.ErrAliasNotFound) {
 			http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 		} else {

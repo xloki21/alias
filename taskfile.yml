@@ -1,20 +1,41 @@
 version: '3'
 
 tasks:
+  generate-mocks:
+    cmd: go generate ./...
+    desc: "Generate mocks using mockery"
+
   build:
-    desc: Build app
     cmd: go build -o aliassrv -v ./cmd/main.go
-  mongodb:
-    desc: Start MongoDB container
-    cmd: docker compose --profile=mongodb up mongodb -d
+    desc: "Build app"
+
+  test:
+    cmd: go test -v ./...
+    desc: "Run all tests"
+
+  coverage:
+    cmds:
+      - go test -coverprofile=coverage.out ./...
+      - go tool cover -html=coverage.out -o coverage.html
+    desc: "Run tests with coverage and generate HTML report"
+
+  test-with-coverage:
+    deps: [ generate-mocks ]
+    cmds:
+      - task: test
+      - task: coverage
+    desc: "Generate mocks, run tests, and calculate coverage"
+
   docker:
-    desc: Build docker image
     cmd: docker build . -t alias:v1.0.0beta
+    desc: "Build docker image"
+
   integration-test:
-    desc: Run integration tests
+    desc: "Run integration tests"
     cmds:
       - go clean -testcache
       - go test -tags=integration -v ./internal/tests/...
+
   e2e-test:
     desc: Run e2e tests
     cmds:

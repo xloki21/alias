@@ -7,7 +7,7 @@ import (
 )
 
 type aliasRepository interface {
-	DecreaseTTLCounter(ctx context.Context, alias domain.Alias) error
+	DecreaseTTLCounter(ctx context.Context, key string) error
 }
 
 type eventConsumer interface {
@@ -40,8 +40,8 @@ func (s *AliasManagerService) processEvent(ctx context.Context, msg any) {
 		zap.String("received", event.String()),
 	)
 
-	if !event.IsPermanent {
-		if err := s.aliasRepo.DecreaseTTLCounter(ctx, event.Alias); err != nil {
+	if !event.Params.IsPermanent {
+		if err := s.aliasRepo.DecreaseTTLCounter(ctx, event.Alias.Key); err != nil {
 			zap.S().Errorw("service",
 				zap.String("name", s.Name()),
 				zap.String("fn", fn),

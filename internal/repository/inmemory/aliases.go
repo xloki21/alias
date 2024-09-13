@@ -13,7 +13,7 @@ type AliasRepository struct {
 }
 
 // SaveMany saves many aliases in one run
-func (a *AliasRepository) SaveMany(ctx context.Context, aliases []*domain.Alias) error {
+func (a *AliasRepository) SaveMany(ctx context.Context, aliases []domain.Alias) error {
 	const fn = "in-memory::SaveMany"
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -21,69 +21,63 @@ func (a *AliasRepository) SaveMany(ctx context.Context, aliases []*domain.Alias)
 		zap.String("name", "AliasRepository"),
 		zap.String("fn", fn),
 		zap.Int("alias count", len(aliases)))
-	for index := range aliases {
-		id := aliases[index].Key
-		aliases[index].ID = id
-
-		a.db[id] = aliases[index]
+	for _, alias := range aliases {
+		a.db[alias.Key] = &alias
 	}
 	return nil
 }
 
 // FindOne gets the target link from the shortened one
-func (a *AliasRepository) FindOne(ctx context.Context, alias *domain.Alias) error {
+func (a *AliasRepository) FindOne(ctx context.Context, key string) (*domain.Alias, error) {
 	const fn = "in-memory::FindOne"
 	zap.S().Infow("repo",
 		zap.String("name", "AliasRepository"),
 		zap.String("fn", fn),
-		zap.String("key", alias.Key))
+		zap.String("key", key))
 
 	a.mu.RLock()
 	defer a.mu.RUnlock()
-	if presented, ok := a.db[alias.Key]; ok {
-		*alias = *presented
-		return nil
+	if presented, ok := a.db[key]; ok {
+		return presented, nil
 	} else {
-		return domain.ErrAliasNotFound
+		return nil, domain.ErrAliasNotFound
 	}
 }
 
 // RemoveOne removes a shortened link
-func (a *AliasRepository) RemoveOne(ctx context.Context, alias *domain.Alias) error {
+func (a *AliasRepository) RemoveOne(ctx context.Context, key string) error {
 	const fn = "in-memory::RemoveOne"
 	zap.S().Infow("repo",
 		zap.String("name", "AliasRepository"),
 		zap.String("fn", fn),
-		zap.String("key", alias.Key))
+		zap.String("key", key))
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if _, ok := a.db[alias.Key]; ok {
-		delete(a.db, alias.Key)
-		return nil
+	if _, ok := a.db[key]; ok {
+		delete(a.db, key)
 	} else {
 		return domain.ErrAliasNotFound
 	}
+	return nil
 }
 
-func (a *AliasRepository) DecreaseTTLCounter(ctx context.Context, alias domain.Alias) error {
+func (a *AliasRepository) DecreaseTTLCounter(ctx context.Context, key string) error {
 	const fn = "in-memory::DecreaseTTLCounter"
 	zap.S().Infow("repo",
 		zap.String("name", "AliasRepository"),
 		zap.String("fn", fn),
-		zap.String("id", alias.Key))
+		zap.String("id", key))
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	if alias.TTL == 0 {
-		return domain.ErrAliasExpired
-	}
-
-	if _, ok := a.db[alias.Key]; !ok { // check: possibly unnecessary
+	if _, ok := a.db[key]; !ok {
 		return domain.ErrAliasNotFound
 	}
-
+	if a.db[key].Params.TriesLeft == 0 {
+		return domain.ErrAliasExpired
+	}
 	// decrease TTL counter
-	a.db[alias.Key].TTL -= 1
+	a.db[key].Params.TriesLeft -= 1
 	return nil
 }
 

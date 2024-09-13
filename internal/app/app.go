@@ -12,9 +12,10 @@ import (
 	"github.com/xloki21/alias/internal/repository"
 	"github.com/xloki21/alias/internal/repository/inmemory"
 	"github.com/xloki21/alias/internal/repository/mongodb"
-	"github.com/xloki21/alias/internal/service/link"
+	"github.com/xloki21/alias/internal/service/alias"
 	"github.com/xloki21/alias/internal/service/manager"
 	"github.com/xloki21/alias/internal/service/stats"
+	"github.com/xloki21/alias/pkg/keygen"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.uber.org/zap"
@@ -52,10 +53,12 @@ func New(cfg config.AppConfig) (*Application, error) {
 	ctx := context.Background()
 	baseURLPrefix := fmt.Sprintf("http://%s%s", cfg.Server.Address, endpointRedirect)
 
-	var aliasService *link.AliasService
+	var aliasService *alias.AliasService
 
 	aliasUsedQ := squeue.New()
 	aliasExpiredQ := squeue.New()
+
+	keyGen := keygen.NewURLSafeRandomStringGenerator()
 
 	switch cfg.Storage.Type {
 	case repository.MongoDB:
@@ -97,7 +100,7 @@ func New(cfg config.AppConfig) (*Application, error) {
 		aliasStatsSvc := stats.NewAliasStatisticsService(statsRepoMongoDB, aliasExpiredQ)
 		aliasStatsSvc.Process(ctx)
 
-		aliasService = link.NewAliasService(aliasExpiredQ, aliasUsedQ, aliasRepoMongoDB)
+		aliasService = alias.NewAliasService(aliasExpiredQ, aliasUsedQ, aliasRepoMongoDB, keyGen)
 
 	case repository.InMemory:
 		zap.S().Info("using in-memory storage type")
@@ -110,7 +113,7 @@ func New(cfg config.AppConfig) (*Application, error) {
 		aliasStatsSvc := stats.NewAliasStatisticsService(statsRepoInMemory, aliasExpiredQ)
 		aliasStatsSvc.Process(ctx)
 
-		aliasService = link.NewAliasService(aliasExpiredQ, aliasUsedQ, aliasRepoInMemory)
+		aliasService = alias.NewAliasService(aliasExpiredQ, aliasUsedQ, aliasRepoInMemory, keyGen)
 
 	default:
 		zap.S().Fatalf("unknown storage type: %s", cfg.Storage.Type)
@@ -174,5 +177,5 @@ func (a *Application) initializeRoutes() {
 	a.router.HandleFunc(endpointCreateAlias, mw.Use(a.controller.CreateAlias, mw.RequestThrottler, mw.Logging, mw.PanicRecovery))
 	a.router.HandleFunc(endpointHealthcheck, mw.Use(a.controller.Healthcheck, mw.RequestThrottler, mw.Logging, mw.PanicRecovery))
 	a.router.HandleFunc(endpointRemoveLink, mw.Use(a.controller.RemoveAlias, mw.RequestThrottler, mw.Logging, mw.PanicRecovery))
-	a.router.HandleFunc(endpointRedirect+"/{linkID}", mw.Use(a.controller.Redirect, mw.RequestThrottler, mw.Logging, mw.PanicRecovery))
+	a.router.HandleFunc(endpointRedirect+"/{key}", mw.Use(a.controller.Redirect, mw.RequestThrottler, mw.Logging, mw.PanicRecovery))
 }

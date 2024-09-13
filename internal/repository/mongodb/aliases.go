@@ -18,14 +18,24 @@ const (
 	StatsCollectionName = "stats"
 )
 
-// aliasDocument is DTO for AliasCollectionName collection
-type aliasDocument struct {
+// AliasDTO is DTO for AliasCollectionName collection
+type AliasDTO struct {
 	ID          string   `bson:"_id"`
-	Origin      *url.URL `bson:"origin"`
-	Alias       *url.URL `bson:"alias"`
+	URL         *url.URL `bson:"url"`
+	Key         string   `bson:"key"`
 	IsActive    bool     `bson:"is_active"`
 	IsPermanent bool     `bson:"is_permanent"`
-	TTL         int      `bson:"ttl"`
+	TriesLeft   int      `bson:"tries_left,omitempty"`
+}
+
+func NewAliasDTO(alias domain.Alias) AliasDTO {
+	return AliasDTO{
+		Key:         alias.Key,
+		URL:         alias.URL,
+		IsActive:    alias.IsActive,
+		IsPermanent: alias.Params.IsPermanent,
+		TriesLeft:   alias.Params.TriesLeft,
+	}
 }
 
 type AliasRepository struct {
@@ -40,7 +50,7 @@ func NewMongoDBAliasRepository(collection *mongo.Collection) *AliasRepository {
 }
 
 // SaveMany saves many aliases in bulk
-func (a *AliasRepository) SaveMany(ctx context.Context, aliases []*domain.Alias) error {
+func (a *AliasRepository) SaveMany(ctx context.Context, aliases []domain.Alias) error {
 	const fn = "mongodb::SaveMany"
 	zap.S().Infow("repo",
 		zap.String("name", "AliasRepository"),
@@ -48,13 +58,13 @@ func (a *AliasRepository) SaveMany(ctx context.Context, aliases []*domain.Alias)
 		zap.Int("aliases count", len(aliases)))
 
 	documents := make([]interface{}, len(aliases))
-	for index := range aliases {
+	for index, alias := range aliases {
 		documents[index] = bson.D{
-			{"key", aliases[index].Key},
-			{"origin", aliases[index].Origin},
-			{"is_active", aliases[index].IsActive},
-			{"is_permanent", aliases[index].IsPermanent},
-			{"TTL", aliases[index].TTL},
+			{"key", alias.Key},
+			{"url", alias.URL},
+			{"is_active", alias.IsActive},
+			{"is_permanent", alias.Params.IsPermanent},
+			{"tries_left", alias.Params.TriesLeft},
 		}
 	}
 	opStatus, err := a.collection.InsertMany(ctx, documents)
@@ -67,86 +77,95 @@ func (a *AliasRepository) SaveMany(ctx context.Context, aliases []*domain.Alias)
 	return nil
 }
 
-// FindOne gets the target link from the shortened one
-func (a *AliasRepository) FindOne(ctx context.Context, alias *domain.Alias) error {
+// FindOne gets the alias by key
+func (a *AliasRepository) FindOne(ctx context.Context, key string) (*domain.Alias, error) {
 	const fn = "mongodb::FindOne"
 	zap.S().Infow("repo",
 		zap.String("name", "AliasRepository"),
 		zap.String("fn", fn),
-		zap.String("key", alias.Key))
+		zap.String("key", key))
 
 	filter := bson.M{
 		"$and": []bson.M{
 			{"is_active": true},
-			{"key": alias.Key},
+			{"key": key},
 		},
 	}
 
 	result := a.collection.FindOne(ctx, filter)
 	if result.Err() != nil {
 		if errors.Is(result.Err(), mongo.ErrNoDocuments) {
-			return domain.ErrAliasNotFound
+			return nil, domain.ErrAliasNotFound
 		}
-		return result.Err()
+		return nil, result.Err()
 	}
-	document := aliasDocument{}
-	if err := result.Decode(&document); err != nil {
-		return err
+	doc := new(AliasDTO)
+	if err := result.Decode(doc); err != nil {
+		return nil, err
 	}
 
-	alias.ID = document.ID
-	alias.Origin = document.Origin
-	alias.TTL = document.TTL
-	alias.IsActive = document.IsActive
-	alias.IsPermanent = document.IsPermanent
-
-	return nil
+	alias := &domain.Alias{
+		ID:       doc.ID,
+		Key:      doc.Key,
+		URL:      doc.URL,
+		IsActive: doc.IsActive,
+		Params:   domain.TTLParams{TriesLeft: doc.TriesLeft, IsPermanent: doc.IsPermanent},
+	}
+	return alias, nil
 }
 
 // DecreaseTTLCounter decreases the alias redirect counter
-func (a *AliasRepository) DecreaseTTLCounter(ctx context.Context, alias domain.Alias) error {
+func (a *AliasRepository) DecreaseTTLCounter(ctx context.Context, key string) error {
 	const fn = "mongodb::DecreaseTTLCounter"
 	zap.S().Infow("repo",
 		zap.String("name", "AliasRepository"),
 		zap.String("fn", fn),
-		zap.String("key", alias.Key))
+		zap.String("key", key))
 
-	if alias.TTL == 0 {
-		return domain.ErrAliasExpired
-	}
-
-	filter := bson.M{"key": alias.Key, "is_active": true}
+	filter := bson.M{"key": key, "is_active": true}
 
 	pipeline := bson.A{
 		bson.M{
-			"$set": bson.M{"TTL": bson.M{"$add": bson.A{"$TTL", -1}}},
+			"$set": bson.M{"tries_left": bson.M{"$add": bson.A{"$tries_left", -1}}},
 		},
 		bson.M{
-			"$set": bson.M{"TTL": bson.M{"$cond": bson.A{bson.M{"$lt": bson.A{"$TTL", 0}}, 0, "$TTL"}}},
+			"$set": bson.M{"tries_left": bson.M{"$cond": bson.A{bson.M{"$lt": bson.A{"$tries_left", 0}}, 0, "$tries_left"}}},
 		},
 	}
 
 	opts := options.FindOneAndUpdate().SetReturnDocument(options.Before)
 
 	result := a.collection.FindOneAndUpdate(ctx, filter, pipeline, opts)
+
 	if result.Err() != nil {
 		if errors.Is(result.Err(), mongo.ErrNoDocuments) {
 			return domain.ErrAliasNotFound
 		}
 		return fmt.Errorf("%s: %w", fn, result.Err())
 	}
+
+	doc := new(AliasDTO)
+
+	if err := result.Decode(doc); err != nil {
+		return fmt.Errorf("%s: %w", fn, err)
+	}
+
+	if doc.TriesLeft == 0 {
+		return domain.ErrAliasExpired
+	}
+
 	return nil
 }
 
 // RemoveOne deletes a shortened link
-func (a *AliasRepository) RemoveOne(ctx context.Context, alias *domain.Alias) error {
+func (a *AliasRepository) RemoveOne(ctx context.Context, key string) error {
 	const fn = "mongodb::RemoveOne"
 	zap.S().Infow("repo",
 		zap.String("name", "AliasRepository"),
 		zap.String("fn", fn),
-		zap.String("key", alias.Key))
+		zap.String("key", key))
 
-	filter := bson.M{"key": alias.Key, "is_active": true}
+	filter := bson.M{"key": key, "is_active": true}
 	update := bson.M{"$set": bson.M{"is_active": false}}
 
 	result := a.collection.FindOneAndUpdate(ctx, filter, update)
@@ -156,7 +175,5 @@ func (a *AliasRepository) RemoveOne(ctx context.Context, alias *domain.Alias) er
 		}
 		return result.Err()
 	}
-
-	alias.IsActive = false
 	return nil
 }

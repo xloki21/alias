@@ -12,7 +12,7 @@ import (
 type eventDocument struct {
 	OccurredAt time.Time `bson:"occurred_at"` // time when event occurred
 	Key        string    `bson:"key"`
-	Origin     *url.URL  `bson:"origin"`
+	URL        *url.URL  `bson:"url"`
 }
 
 type AliasStatsRepository struct {
@@ -37,7 +37,7 @@ func (r *AliasStatsRepository) PushStats(ctx context.Context, event domain.Alias
 	newEventDoc := eventDocument{
 		OccurredAt: event.OccurredAt,
 		Key:        event.Key,
-		Origin:     event.Origin,
+		URL:        event.URL,
 	}
 
 	if _, err := r.collection.InsertOne(ctx, newEventDoc); err != nil {

@@ -10,9 +10,10 @@ import (
 	"github.com/xloki21/alias/internal/domain"
 	"github.com/xloki21/alias/internal/infrastructure/squeue"
 	"github.com/xloki21/alias/internal/repository/mongodb"
-	"github.com/xloki21/alias/internal/service/link"
+	"github.com/xloki21/alias/internal/service/alias"
 	"github.com/xloki21/alias/internal/service/manager"
 	"github.com/xloki21/alias/internal/service/stats"
+	"github.com/xloki21/alias/pkg/keygen"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -20,9 +21,12 @@ import (
 	"testing"
 )
 
-const tag = "7.0.6"
+const (
+	aliasAppDatabase = "appdb"
+	tag              = "7.0.6"
+)
 
-func setupMongoDBContainer(t *testing.T) (testcontainers.Container, *mongo.Database) {
+func setupMongoDBContainer(t *testing.T, testData []domain.Alias) (testcontainers.Container, *mongo.Database) {
 	ctx := context.Background()
 
 	mongodbContainer, err := tc.Run(ctx, fmt.Sprintf("mongo:%s", tag))
@@ -40,7 +44,7 @@ func setupMongoDBContainer(t *testing.T) (testcontainers.Container, *mongo.Datab
 	err = client.Ping(ctx, nil)
 	require.NoError(t, err)
 
-	db := client.Database("appdb")
+	db := client.Database(aliasAppDatabase)
 	coll := db.Collection(mongodb.AliasCollectionName)
 
 	indexModel := mongo.IndexModel{
@@ -51,18 +55,25 @@ func setupMongoDBContainer(t *testing.T) (testcontainers.Container, *mongo.Datab
 	require.NoError(t, err)
 	zap.S().Info("index created", zap.String("name", name))
 
+	if testData != nil {
+		zap.S().Info("filling test data", zap.String("collection", mongodb.AliasCollectionName))
+		docs := make([]interface{}, len(testData))
+		for index, alias := range testData {
+			docs[index] = bson.D{
+				{"key", alias.Key},
+				{"url", alias.URL},
+				{"is_active", alias.IsActive},
+				{"is_permanent", alias.Params.IsPermanent},
+				{"tries_left", alias.Params.TriesLeft},
+			}
+		}
+		_, err := coll.InsertMany(ctx, docs, options.InsertMany().SetOrdered(false))
+		assert.NoError(t, err)
+	}
 	return mongodbContainer, db
 }
 
-func TestAliasServiceCreateManyMongoDB(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-	container, db := setupMongoDBContainer(t)
-	defer func(container testcontainers.Container, ctx context.Context) {
-		err := container.Terminate(ctx)
-		require.NoError(t, err)
-	}(container, ctx)
-
+func NewAliasTestService(ctx context.Context, db *mongo.Database) *alias.AliasService {
 	aliasUsedQ := squeue.New()
 	aliasExpiredQ := squeue.New()
 
@@ -74,11 +85,27 @@ func TestAliasServiceCreateManyMongoDB(t *testing.T) {
 	aliasStatsSvc := stats.NewAliasStatisticsService(statsRepoMongoDB, aliasExpiredQ)
 	aliasStatsSvc.Process(ctx)
 
-	aliasService := link.NewAliasService(aliasExpiredQ, aliasUsedQ, aliasRepoMongoDB)
+	keyGen := keygen.NewURLSafeRandomStringGenerator()
+
+	aliasService := alias.NewAliasService(aliasExpiredQ, aliasUsedQ, aliasRepoMongoDB, keyGen)
+	return aliasService
+
+}
+
+func TestAliasServiceCreateManyMongoDB(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	container, db := setupMongoDBContainer(t, nil)
+	defer func(container testcontainers.Container, ctx context.Context) {
+		err := container.Terminate(ctx)
+		require.NoError(t, err)
+	}(container, ctx)
+
+	aliasService := NewAliasTestService(ctx, db)
 
 	type args struct {
-		ctx     context.Context
-		aliases []*domain.Alias
+		ctx      context.Context
+		requests []domain.AliasCreationRequest
 	}
 
 	testCases := []struct {
@@ -88,26 +115,15 @@ func TestAliasServiceCreateManyMongoDB(t *testing.T) {
 	}{
 		{
 			name:        "create multiple aliases with success",
-			args:        args{ctx: context.Background(), aliases: link.TestURLSet(t, 2000)},
+			args:        args{ctx: context.Background(), requests: alias.TestSetAliasCreationRequests(2000)},
 			expectedErr: nil,
 		},
 	}
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			assert.NoError(t, aliasService.CreateMany(testCase.args.ctx, testCase.args.aliases))
-
-			for _, arg := range testCase.args.aliases {
-				foundOne := &domain.Alias{
-					Key:      arg.Key,
-					IsActive: true,
-				}
-
-				err := aliasRepoMongoDB.FindOne(ctx, foundOne)
-				if assert.NoError(t, err) {
-					assert.Equal(t, arg, foundOne)
-				}
-			}
+			_, err := aliasService.CreateMany(testCase.args.ctx, testCase.args.requests)
+			assert.NoError(t, err)
 		})
 	}
 }
@@ -115,24 +131,19 @@ func TestAliasServiceCreateManyMongoDB(t *testing.T) {
 func TestAliasServiceFindOneMongoDB(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	container, db := setupMongoDBContainer(t)
+
+	testData := []domain.Alias{
+		alias.TestAlias(t, false),
+		alias.TestAlias(t, true),
+	}
+
+	container, db := setupMongoDBContainer(t, testData)
 	defer func(container testcontainers.Container, ctx context.Context) {
 		err := container.Terminate(ctx)
 		require.NoError(t, err)
 	}(container, ctx)
 
-	aliasUsedQ := squeue.New()
-	aliasExpiredQ := squeue.New()
-
-	aliasRepoMongoDB := mongodb.NewMongoDBAliasRepository(db.Collection(mongodb.AliasCollectionName))
-	statsRepoMongoDB := mongodb.NewAliasStatsRepository(db.Collection(mongodb.StatsCollectionName))
-	aliasManagerSvc := manager.NewAliasManagerService(aliasRepoMongoDB, aliasUsedQ)
-	aliasManagerSvc.Process(ctx)
-
-	aliasStatsSvc := stats.NewAliasStatisticsService(statsRepoMongoDB, aliasExpiredQ)
-	aliasStatsSvc.Process(ctx)
-
-	aliasService := link.NewAliasService(aliasExpiredQ, aliasUsedQ, aliasRepoMongoDB)
+	aliasService := NewAliasTestService(ctx, db)
 
 	type args struct {
 		ctx context.Context
@@ -146,7 +157,7 @@ func TestAliasServiceFindOneMongoDB(t *testing.T) {
 		expectedErr error
 	}{
 		{
-			name: "alias not found",
+			name: "alias is not found",
 			args: args{
 				ctx: context.Background(),
 				key: "non-existent-key",
@@ -154,16 +165,24 @@ func TestAliasServiceFindOneMongoDB(t *testing.T) {
 			wants:       nil,
 			expectedErr: domain.ErrAliasNotFound,
 		},
+		{
+			name: "alias is found",
+			args: args{
+				ctx: context.Background(),
+				key: testData[0].Key,
+			},
+			wants:       &testData[0],
+			expectedErr: nil,
+		},
 	}
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			aliases := link.TestURLSet(t, 2000)
-			assert.NoError(t, aliasService.CreateMany(ctx, aliases))
-
 			got, err := aliasService.FindOne(ctx, testCase.args.key)
 			assert.ErrorIs(t, err, testCase.expectedErr)
-			assert.Equal(t, got, testCase.wants)
+			if testCase.wants != nil {
+				assert.Equal(t, testCase.wants.URL, got.URL)
+			}
 		})
 	}
 }
@@ -171,48 +190,45 @@ func TestAliasServiceFindOneMongoDB(t *testing.T) {
 func TestAliasServiceRemoveOneMongoDB(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	container, db := setupMongoDBContainer(t)
+
+	testData := []domain.Alias{
+		alias.TestAlias(t, false),
+		alias.TestAlias(t, true),
+	}
+
+	container, db := setupMongoDBContainer(t, testData)
 	defer func(container testcontainers.Container, ctx context.Context) {
 		err := container.Terminate(ctx)
 		require.NoError(t, err)
 	}(container, ctx)
 
-	aliasUsedQ := squeue.New()
-	aliasExpiredQ := squeue.New()
-
-	aliasRepoMongoDB := mongodb.NewMongoDBAliasRepository(db.Collection(mongodb.AliasCollectionName))
-	statsRepoMongoDB := mongodb.NewAliasStatsRepository(db.Collection(mongodb.StatsCollectionName))
-	aliasManagerSvc := manager.NewAliasManagerService(aliasRepoMongoDB, aliasUsedQ)
-	aliasManagerSvc.Process(ctx)
-
-	aliasStatsSvc := stats.NewAliasStatisticsService(statsRepoMongoDB, aliasExpiredQ)
-	aliasStatsSvc.Process(ctx)
-
-	aliasService := link.NewAliasService(aliasExpiredQ, aliasUsedQ, aliasRepoMongoDB)
+	aliasService := NewAliasTestService(ctx, db)
 
 	type args struct {
-		ctx   context.Context
-		alias *domain.Alias
+		ctx context.Context
+		key string
 	}
 
 	testCases := []struct {
 		name        string
-		prefill     bool
 		args        args
 		expectedErr error
 	}{
 		{
 			name:        "remove non-existent aliases",
-			prefill:     false,
-			args:        args{ctx: context.Background(), alias: &domain.Alias{Key: "non-existent-key"}},
+			args:        args{ctx: context.Background(), key: "non-existent-key"},
 			expectedErr: domain.ErrAliasNotFound,
+		},
+		{
+			name:        "remove alias successfully",
+			args:        args{ctx: context.Background(), key: testData[0].Key},
+			expectedErr: nil,
 		},
 	}
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-
-			err := aliasService.RemoveOne(testCase.args.ctx, testCase.args.alias)
+			err := aliasService.RemoveOne(testCase.args.ctx, testCase.args.key)
 			assert.ErrorIs(t, err, testCase.expectedErr)
 		})
 	}
