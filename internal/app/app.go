@@ -53,7 +53,7 @@ func New(cfg config.AppConfig) (*Application, error) {
 	ctx := context.Background()
 	baseURLPrefix := fmt.Sprintf("http://%s%s", cfg.Server.Address, endpointRedirect)
 
-	var aliasService *alias.AliasService
+	var aliasService *alias.Service
 
 	aliasUsedQ := squeue.New()
 	aliasExpiredQ := squeue.New()

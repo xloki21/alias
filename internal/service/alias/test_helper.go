@@ -15,7 +15,7 @@ import (
 type TestHelper struct {
 	repo    *mocks.AliasRepo
 	keyGen  *mocks.KeyGenerator
-	service *AliasService
+	service *Service
 }
 
 func NewTestHelper(t *testing.T) *TestHelper {

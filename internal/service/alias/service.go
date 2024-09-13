@@ -14,8 +14,8 @@ const (
 )
 
 // NewAliasService creates a new alias service
-func NewAliasService(aliasExpiredQ eventProducer, aliasUsedQ eventProducer, repo aliasRepo, keyGenerator keyGenerator) *AliasService {
-	return &AliasService{
+func NewAliasService(aliasExpiredQ eventProducer, aliasUsedQ eventProducer, repo aliasRepo, keyGenerator keyGenerator) *Service {
+	return &Service{
 		aliasExpiredQ: aliasExpiredQ,
 		aliasUsedQ:    aliasUsedQ,
 		repo:          repo,
@@ -40,19 +40,19 @@ type keyGenerator interface {
 	Generate(n int) (string, error)
 }
 
-type AliasService struct {
+type Service struct {
 	repo          aliasRepo
 	aliasExpiredQ eventProducer
 	aliasUsedQ    eventProducer
 	keyGenerator  keyGenerator
 }
 
-func (s *AliasService) Name() string {
+func (s *Service) Name() string {
 	return "AliasService"
 }
 
 // CreateMany creates a set of shortened links for the given origin links
-func (s *AliasService) CreateMany(ctx context.Context, requests []domain.AliasCreationRequest) ([]domain.Alias, error) {
+func (s *Service) CreateMany(ctx context.Context, requests []domain.AliasCreationRequest) ([]domain.Alias, error) {
 	const fn = "AliasService::CreateMany"
 	zap.S().Infow("service",
 		zap.String("name", s.Name()),
@@ -116,7 +116,7 @@ func (s *AliasService) CreateMany(ctx context.Context, requests []domain.AliasCr
 }
 
 // FindOne finds the alias link
-func (s *AliasService) FindOne(ctx context.Context, key string) (*domain.Alias, error) {
+func (s *Service) FindOne(ctx context.Context, key string) (*domain.Alias, error) {
 	const fn = "AliasService::FindOne"
 
 	zap.S().Infow("service",
@@ -168,7 +168,7 @@ func (s *AliasService) FindOne(ctx context.Context, key string) (*domain.Alias, 
 }
 
 // RemoveOne removes the alias link
-func (s *AliasService) RemoveOne(ctx context.Context, key string) error {
+func (s *Service) RemoveOne(ctx context.Context, key string) error {
 	const fn = "AliasService::RemoveOne"
 	zap.S().Infow("service",
 		zap.String("name", s.Name()),
