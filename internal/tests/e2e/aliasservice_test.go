@@ -1,10 +1,8 @@
-//go:build e2e
-// +build e2e
-
 package e2e
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -14,6 +12,7 @@ import (
 	"github.com/xloki21/alias/internal/controller/mw"
 	"github.com/xloki21/alias/internal/tests"
 	"go.uber.org/zap"
+	"io"
 	"net/http"
 	"strings"
 	"testing"
@@ -21,6 +20,7 @@ import (
 )
 
 const (
+	testAppAddress          = "localhost:8080"
 	testApiV1               = "/api/v1"
 	testEndpointCreateAlias = testApiV1 + "/alias"
 	testEndpointHealthcheck = testApiV1 + "/healthcheck"
@@ -31,6 +31,7 @@ const (
 func TestApi_e2e(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
+
 	container, db := tests.SetupMongoDBContainer(t, nil)
 	defer func(container testcontainers.Container, ctx context.Context) {
 		err := container.Terminate(ctx)
@@ -38,7 +39,7 @@ func TestApi_e2e(t *testing.T) {
 	}(container, ctx)
 
 	service := tests.NewAliasTestService(ctx, db)
-	ctrl := controller.NewAliasController(service, "alias-service")
+	ctrl := controller.NewAliasController(service, fmt.Sprintf("http://%s", testAppAddress))
 
 	mux := http.NewServeMux()
 	mux.HandleFunc(testEndpointCreateAlias, mw.Use(ctrl.CreateAlias, mw.RequestThrottler, mw.Logging, mw.PanicRecovery))
@@ -47,7 +48,7 @@ func TestApi_e2e(t *testing.T) {
 	mux.HandleFunc(testEndpointRedirect+"/{key}", mw.Use(ctrl.Redirect, mw.RequestThrottler, mw.Logging, mw.PanicRecovery))
 
 	application := &app.Application{
-		Address:    "localhost:8080",
+		Address:    testAppAddress,
 		Router:     mux,
 		Controller: ctrl,
 	}
@@ -83,6 +84,31 @@ func TestApi_e2e(t *testing.T) {
 			"application/json", nil)
 		assert.NoError(t, err)
 		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+
+	})
+
+	t.Run("Redirect should be ok", func(t *testing.T) {
+		resp, err := client.Post(
+			fmt.Sprintf("http://%s%s", application.Address, testEndpointCreateAlias),
+			"application/json", strings.NewReader("{\"urls\": [\"http://www.ya.ru\"]}"))
+		assert.NoError(t, err)
+		assert.Equal(t, http.StatusCreated, resp.StatusCode)
+
+		content, err := io.ReadAll(resp.Body)
+		assert.NoError(t, err)
+
+		type AliasesList struct {
+			Urls []string `json:"urls"`
+		}
+
+		aliases := new(AliasesList)
+
+		err = json.Unmarshal(content, aliases)
+		assert.NoError(t, err)
+
+		resp, err = client.Get(aliases.Urls[0])
+		assert.NoError(t, err)
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 	})
 
