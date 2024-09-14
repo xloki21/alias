@@ -31,12 +31,18 @@ tasks:
     desc: "Build docker image"
 
   integration-test:
-    desc: "Run integration tests"
     cmds:
       - go clean -testcache
       - go test -tags=integration -v ./internal/tests/...
+    desc: "Run integration tests"
+
+  mock-test:
+    cmds:
+      - task: generate-mocks
+      - go test -tags=mock -v ./internal/service/alias/...
+    desc: "Run mock tests"
 
   e2e-test:
-    desc: Run e2e tests
     cmds:
       - go test -tags=e2e -v ./internal/tests/...
+    desc: "Run e2e tests"

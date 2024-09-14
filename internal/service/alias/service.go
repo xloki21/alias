@@ -10,7 +10,7 @@ import (
 
 const (
 	maxGoroutines = 10
-	keyLength     = 7
+	keyLength     = 8
 )
 
 // NewAliasService creates a new alias service
@@ -53,11 +53,12 @@ func (s *Service) Name() string {
 
 // CreateMany creates a set of shortened links for the given origin links
 func (s *Service) CreateMany(ctx context.Context, requests []domain.AliasCreationRequest) ([]domain.Alias, error) {
-	const fn = "AliasService::CreateMany"
+	fn := "CreateMany"
 	zap.S().Infow("service",
 		zap.String("name", s.Name()),
 		zap.String("fn", fn),
 		zap.Int("requests count", len(requests)))
+
 	type indexedResult struct {
 		index int
 		alias domain.Alias
@@ -98,9 +99,13 @@ func (s *Service) CreateMany(ctx context.Context, requests []domain.AliasCreatio
 	close(errChan)
 	close(resultChan)
 
-	for errVal := range errChan {
-		if errVal != nil {
-			return nil, errVal
+	for err := range errChan {
+		if err != nil {
+			zap.S().Errorw("service",
+				zap.String("name", s.Name()),
+				zap.String("fn", fn),
+				zap.Error(err))
+			return nil, err
 		}
 	}
 	aliases := make([]domain.Alias, len(requests))
@@ -109,6 +114,10 @@ func (s *Service) CreateMany(ctx context.Context, requests []domain.AliasCreatio
 	}
 
 	if err := s.repo.SaveMany(ctx, aliases); err != nil {
+		zap.S().Errorw("service",
+			zap.String("name", s.Name()),
+			zap.String("fn", fn),
+			zap.Error(err))
 		return nil, err
 	}
 
@@ -117,7 +126,7 @@ func (s *Service) CreateMany(ctx context.Context, requests []domain.AliasCreatio
 
 // FindOne finds the alias link
 func (s *Service) FindOne(ctx context.Context, key string) (*domain.Alias, error) {
-	const fn = "AliasService::FindOne"
+	fn := "FindOne"
 
 	zap.S().Infow("service",
 		zap.String("name", s.Name()),
@@ -169,7 +178,7 @@ func (s *Service) FindOne(ctx context.Context, key string) (*domain.Alias, error
 
 // RemoveOne removes the alias link
 func (s *Service) RemoveOne(ctx context.Context, key string) error {
-	const fn = "AliasService::RemoveOne"
+	fn := "RemoveOne"
 	zap.S().Infow("service",
 		zap.String("name", s.Name()),
 		zap.String("fn", fn),

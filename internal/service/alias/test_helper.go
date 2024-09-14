@@ -13,9 +13,11 @@ import (
 )
 
 type TestHelper struct {
-	repo    *mocks.AliasRepo
-	keyGen  *mocks.KeyGenerator
-	service *Service
+	aliasExpiredQ *mocks.EventProducer
+	aliasUsedQ    *mocks.EventProducer
+	repo          *mocks.AliasRepo
+	keyGen        *mocks.KeyGenerator
+	service       *Service
 }
 
 func NewTestHelper(t *testing.T) *TestHelper {
@@ -24,9 +26,11 @@ func NewTestHelper(t *testing.T) *TestHelper {
 	aliasUsedQ := mocks.NewEventProducer(t)
 	keyGen := mocks.NewKeyGenerator(t)
 	return &TestHelper{
-		repo:    repo,
-		keyGen:  keyGen,
-		service: NewAliasService(aliasExpiredQ, aliasUsedQ, repo, keyGen)}
+		aliasExpiredQ: aliasExpiredQ,
+		aliasUsedQ:    aliasUsedQ,
+		repo:          repo,
+		keyGen:        keyGen,
+		service:       NewAliasService(aliasExpiredQ, aliasUsedQ, repo, keyGen)}
 }
 
 func TestSetAliasCreationRequests(quantity int) []domain.AliasCreationRequest {
@@ -50,7 +54,7 @@ func TestSetAliasCreationRequests(quantity int) []domain.AliasCreationRequest {
 }
 
 func TestAlias(t *testing.T, isPermanent bool) domain.Alias {
-	triesLeft := rand.Intn(10)
+	triesLeft := 1 + rand.Intn(10)
 	if isPermanent {
 		triesLeft = 0
 	}

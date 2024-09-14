@@ -67,6 +67,11 @@ func (ac *AliasController) CreateAlias(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if len(payload.URLs) == 0 {
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+
 	// helper struct to keep order of the validated URL's
 	type indexedResult struct {
 		index   int

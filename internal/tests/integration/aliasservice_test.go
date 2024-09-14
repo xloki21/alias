@@ -1,3 +1,6 @@
+//go:build integration
+// +build integration
+
 package integration
 
 import (
@@ -11,7 +14,7 @@ import (
 	"testing"
 )
 
-func TestAliasServiceCreateManyMongoDB(t *testing.T) {
+func TestAliasService_CreateMany_MongoDB(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	container, db := tests.SetupMongoDBContainer(t, nil)
@@ -47,7 +50,7 @@ func TestAliasServiceCreateManyMongoDB(t *testing.T) {
 	}
 }
 
-func TestAliasServiceFindOneMongoDB(t *testing.T) {
+func TestAliasService_FindOne_MongoDB(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
@@ -106,7 +109,7 @@ func TestAliasServiceFindOneMongoDB(t *testing.T) {
 	}
 }
 
-func TestAliasServiceRemoveOneMongoDB(t *testing.T) {
+func TestAliasService_RemoveOne_MongoDB(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 

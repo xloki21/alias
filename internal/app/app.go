@@ -44,9 +44,9 @@ const (
 )
 
 type Application struct {
-	address    string
-	router     *http.ServeMux
-	controller *controller.AliasController
+	Address    string
+	Router     *http.ServeMux
+	Controller *controller.AliasController
 }
 
 func New(cfg config.AppConfig) (*Application, error) {
@@ -123,9 +123,9 @@ func New(cfg config.AppConfig) (*Application, error) {
 	ctrl := controller.NewAliasController(aliasService, baseURLPrefix)
 
 	app := &Application{
-		address:    cfg.Server.Address,
-		router:     http.NewServeMux(),
-		controller: ctrl,
+		Address:    cfg.Server.Address,
+		Router:     http.NewServeMux(),
+		Controller: ctrl,
 	}
 
 	app.initializeRoutes()
@@ -138,10 +138,10 @@ func (a *Application) Run(ctx context.Context) error {
 	defer cancelFn()
 
 	server := &http.Server{
-		Addr:         a.address,
+		Addr:         a.Address,
 		ReadTimeout:  httpServerReadTimeout,
 		WriteTimeout: httpServerWriteTimeout,
-		Handler:      a.router,
+		Handler:      a.Router,
 	}
 
 	errChan := make(chan error)
@@ -174,8 +174,8 @@ func (a *Application) Run(ctx context.Context) error {
 }
 
 func (a *Application) initializeRoutes() {
-	a.router.HandleFunc(endpointCreateAlias, mw.Use(a.controller.CreateAlias, mw.RequestThrottler, mw.Logging, mw.PanicRecovery))
-	a.router.HandleFunc(endpointHealthcheck, mw.Use(a.controller.Healthcheck, mw.RequestThrottler, mw.Logging, mw.PanicRecovery))
-	a.router.HandleFunc(endpointRemoveLink, mw.Use(a.controller.RemoveAlias, mw.RequestThrottler, mw.Logging, mw.PanicRecovery))
-	a.router.HandleFunc(endpointRedirect+"/{key}", mw.Use(a.controller.Redirect, mw.RequestThrottler, mw.Logging, mw.PanicRecovery))
+	a.Router.HandleFunc(endpointCreateAlias, mw.Use(a.Controller.CreateAlias, mw.RequestThrottler, mw.Logging, mw.PanicRecovery))
+	a.Router.HandleFunc(endpointHealthcheck, mw.Use(a.Controller.Healthcheck, mw.RequestThrottler, mw.Logging, mw.PanicRecovery))
+	a.Router.HandleFunc(endpointRemoveLink, mw.Use(a.Controller.RemoveAlias, mw.RequestThrottler, mw.Logging, mw.PanicRecovery))
+	a.Router.HandleFunc(endpointRedirect+"/{key}", mw.Use(a.Controller.Redirect, mw.RequestThrottler, mw.Logging, mw.PanicRecovery))
 }
