@@ -1,3 +1,6 @@
+//go:build e2e
+// +build e2e
+
 package e2e
 
 import (
@@ -65,12 +68,21 @@ func TestApi_e2e(t *testing.T) {
 		assert.Equal(t, http.StatusCreated, resp.StatusCode)
 
 	})
-	t.Run("CreateAlias should fail", func(t *testing.T) {
+	t.Run("CreateAlias should fail: request body is invalid", func(t *testing.T) {
 		resp, err := client.Post(
 			fmt.Sprintf("http://%s%s", application.Address, testEndpointCreateAlias),
 			"application/json", strings.NewReader("{\"urlcs\": [\"http://www.ya.ru\"]}"))
 		assert.NoError(t, err)
-		assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+
+	})
+
+	t.Run("CreateAlias should fail: request body is empty", func(t *testing.T) {
+		resp, err := client.Post(
+			fmt.Sprintf("http://%s%s", application.Address, testEndpointCreateAlias),
+			"application/json", nil)
+		assert.NoError(t, err)
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 
 	})
 
