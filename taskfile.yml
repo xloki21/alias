@@ -46,3 +46,58 @@ tasks:
     cmds:
       - go test -tags=e2e -v ./internal/tests/...
     desc: "Run e2e tests"
+
+  grpc-ensure-protoc:
+    cmds:
+      - |
+        if ! command -v protoc &> /dev/null; then
+          echo "protoc could not be found, installing it now..."
+          mkdir -p /tmp/protoc_install
+          curl -Lo /tmp/protoc_install/protoc.zip https://github.com/protocolbuffers/protobuf/releases/download/v27.3/protoc-27.3-linux-x86_64.zip
+          unzip /tmp/protoc_install/protoc.zip -d /usr/local
+          rm -rf /tmp/protoc_install
+          echo "protoc installed successfully!"
+        else
+          echo "protoc is already installed"
+        fi
+      - protoc --version
+
+  grpc-ensure-plugins:
+    cmds:
+      - |
+        if ! command -v protoc-gen-go &> /dev/null; then
+          echo "Installing protoc-gen-go..."
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+          echo "protoc-gen-go installed"
+        else
+          echo "protoc-gen-go is already installed"
+        fi
+      - |
+        if ! command -v protoc-gen-go-grpc &> /dev/null; then
+          echo "Installing protoc-gen-go-grpc..."
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+          echo "protoc-gen-go-grpc installed"
+        else
+          echo "protoc-gen-go-grpc is already installed"
+        fi
+      - |
+        if ! command -v protoc-gen-grpc-gateway &> /dev/null; then
+          echo "Installing protoc-gen-grpc-gateway..."
+          go install github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-grpc-gateway@latest
+          echo "protoc-gen-grpc-gateway installed"
+        else
+          echo "protoc-gen-grpc-gateway is already installed"
+        fi
+  grpc-download-vendor-protos:
+    cmds:
+      - echo "Cloning Google APIs repo"
+      - mkdir -p vendor-proto
+      - git clone https://github.com/googleapis/googleapis.git vendor-proto/googleapis
+      - echo "Cloning gRPC-Gateway repo"
+      - git clone https://github.com/grpc-ecosystem/grpc-gateway.git vendor-proto/grpc-gateway
+    desc: "Clone full Google API and gRPC-Gateway proto repositories"
+
+  clean:
+    cmds:
+      - echo "Cleaning generated files..."
+      - rm -rf gen/go vendor-proto

@@ -37,10 +37,9 @@ const (
 
 const (
 	apiV1               = "/api/v1"
-	endpointCreateAlias = apiV1 + "/alias"
+	endpointAlias       = apiV1 + "/alias"
 	endpointHealthcheck = apiV1 + "/healthcheck"
 	endpointRedirect    = ""
-	endpointRemoveLink  = apiV1 + "/remove"
 )
 
 type Application struct {
@@ -174,8 +173,8 @@ func (a *Application) Run(ctx context.Context) error {
 }
 
 func (a *Application) initializeRoutes() {
-	a.Router.HandleFunc(endpointCreateAlias, mw.Use(a.Controller.CreateAlias, mw.RequestThrottler, mw.Logging, mw.PanicRecovery))
+	a.Router.HandleFunc(endpointAlias, mw.Use(a.Controller.CreateAlias, mw.RequestThrottler, mw.Logging, mw.PanicRecovery))
 	a.Router.HandleFunc(endpointHealthcheck, mw.Use(a.Controller.Healthcheck, mw.RequestThrottler, mw.Logging, mw.PanicRecovery))
-	a.Router.HandleFunc(endpointRemoveLink, mw.Use(a.Controller.RemoveAlias, mw.RequestThrottler, mw.Logging, mw.PanicRecovery))
+	a.Router.HandleFunc(endpointAlias+"/{key}", mw.Use(a.Controller.RemoveAlias, mw.RequestThrottler, mw.Logging, mw.PanicRecovery))
 	a.Router.HandleFunc(endpointRedirect+"/{key}", mw.Use(a.Controller.Redirect, mw.RequestThrottler, mw.Logging, mw.PanicRecovery))
 }

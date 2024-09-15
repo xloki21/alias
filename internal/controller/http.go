@@ -169,20 +169,9 @@ func (ac *AliasController) RemoveAlias(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 		return
 	}
+	key := r.PathValue("key")
 
-	content, err := io.ReadAll(r.Body)
-	if err != nil {
-		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
-		return
-	}
-
-	payload := new(requestDeleteAlias)
-	if err := json.Unmarshal(content, payload); err != nil {
-		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
-		return
-	}
-
-	if err := ac.service.RemoveOne(r.Context(), payload.Key); err != nil {
+	if err := ac.service.RemoveOne(r.Context(), key); err != nil {
 		if errors.Is(err, domain.ErrAliasNotFound) {
 			http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 		} else {
