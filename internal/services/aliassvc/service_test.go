@@ -1,7 +1,7 @@
 //go:build mock
 // +build mock
 
-package alias
+package aliassvc
 
 import (
 	"context"
@@ -9,11 +9,33 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/xloki21/alias/internal/domain"
+	"github.com/xloki21/alias/internal/services/aliassvc/mocks"
 	"net/url"
 	"testing"
 )
 
-func TestService_CreateMany(t *testing.T) {
+type TestHelper struct {
+	expiredQ *mocks.MockEventProducer
+	usedQ    *mocks.MockEventProducer
+	repo     *mocks.MockAliasRepo
+	keyGen   *mocks.MockKeyGenerator
+	service  *Alias
+}
+
+func NewTestHelper(t *testing.T) *TestHelper {
+	repo := mocks.NewMockAliasRepo(t)
+	expiredQ := mocks.NewMockEventProducer(t)
+	usedQ := mocks.NewMockEventProducer(t)
+	keyGen := mocks.NewMockKeyGenerator(t)
+	return &TestHelper{
+		expiredQ: expiredQ,
+		usedQ:    usedQ,
+		repo:     repo,
+		keyGen:   keyGen,
+		service:  NewAlias(expiredQ, usedQ, repo, keyGen)}
+}
+
+func TestAlias_Create(t *testing.T) {
 	t.Parallel()
 	type args struct {
 		ctx      context.Context
@@ -48,7 +70,7 @@ func TestService_CreateMany(t *testing.T) {
 					}
 				}
 
-				th.repo.On("SaveMany", args.ctx, aliases).
+				th.repo.On("Save", args.ctx, aliases).
 					Return(nil)
 
 				return aliases
@@ -79,14 +101,14 @@ func TestService_CreateMany(t *testing.T) {
 			th := NewTestHelper(t)
 			expectedAliases := testCase.mockFunc(th, testCase.args)
 
-			gotResult, gotErr := th.service.CreateMany(testCase.args.ctx, testCase.args.requests)
+			gotResult, gotErr := th.service.Create(testCase.args.ctx, testCase.args.requests)
 			require.ErrorIs(t, gotErr, testCase.expectErr)
 			require.Equal(t, expectedAliases, gotResult)
 		})
 	}
 }
 
-func TestService_FindOne(t *testing.T) {
+func TestAlias_FindByKey(t *testing.T) {
 	t.Parallel()
 	type args struct {
 		ctx context.Context
@@ -111,7 +133,7 @@ func TestService_FindOne(t *testing.T) {
 					Params:   domain.TTLParams{IsPermanent: true},
 				}
 
-				th.repo.On("FindOne", args.ctx, args.key).Return(alias, nil)
+				th.repo.On("Find", args.ctx, args.key).Return(alias, nil)
 
 				return alias
 			},
@@ -128,8 +150,8 @@ func TestService_FindOne(t *testing.T) {
 					Params:   domain.TTLParams{TriesLeft: 3, IsPermanent: false},
 				}
 
-				th.repo.On("FindOne", args.ctx, args.key).Return(alias, nil)
-				th.aliasUsedQ.On("Produce", mock.AnythingOfType("AliasUsed"))
+				th.repo.On("Find", args.ctx, args.key).Return(alias, nil)
+				th.usedQ.On("Produce", mock.AnythingOfType("AliasUsed"))
 				return alias
 			},
 		},
@@ -145,8 +167,8 @@ func TestService_FindOne(t *testing.T) {
 					Params:   domain.TTLParams{TriesLeft: 0},
 				}
 
-				th.repo.On("FindOne", args.ctx, args.key).Return(alias, nil)
-				th.aliasExpiredQ.On("Produce", mock.AnythingOfType("AliasExpired"))
+				th.repo.On("Find", args.ctx, args.key).Return(alias, nil)
+				th.expiredQ.On("Produce", mock.AnythingOfType("AliasExpired"))
 				return nil
 			},
 			expectErr: domain.ErrAliasExpired,
@@ -155,7 +177,7 @@ func TestService_FindOne(t *testing.T) {
 			name: "alias not found",
 			args: args{ctx: context.Background(), key: "lookup-key"},
 			mockFunc: func(th *TestHelper, args args) *domain.Alias {
-				th.repo.On("FindOne", args.ctx, args.key).Return(nil, domain.ErrAliasNotFound)
+				th.repo.On("Find", args.ctx, args.key).Return(nil, domain.ErrAliasNotFound)
 				return nil
 			},
 			expectErr: domain.ErrAliasNotFound,
@@ -167,14 +189,14 @@ func TestService_FindOne(t *testing.T) {
 			t.Parallel()
 			th := NewTestHelper(t)
 			wants := tt.mockFunc(th, tt.args)
-			got, err := th.service.FindOne(tt.args.ctx, tt.args.key)
+			got, err := th.service.FindByKey(tt.args.ctx, tt.args.key)
 			assert.Equal(t, wants, got)
 			assert.ErrorIs(t, err, tt.expectErr)
 		})
 	}
 }
 
-func TestService_RemoveOne(t *testing.T) {
+func TestAlias_Remove(t *testing.T) {
 	t.Parallel()
 	type args struct {
 		ctx context.Context
@@ -191,7 +213,7 @@ func TestService_RemoveOne(t *testing.T) {
 			name: "remove alias successfully",
 			args: args{ctx: context.Background(), key: "lookup-key"},
 			mockFunc: func(th *TestHelper, args args) *domain.Alias {
-				th.repo.On("RemoveOne", args.ctx, args.key).Return(nil)
+				th.repo.On("Remove", args.ctx, args.key).Return(nil)
 				return nil
 			},
 		},
@@ -199,7 +221,7 @@ func TestService_RemoveOne(t *testing.T) {
 			name: "alias not found on remove",
 			args: args{ctx: context.Background(), key: "lookup-key"},
 			mockFunc: func(th *TestHelper, args args) *domain.Alias {
-				th.repo.On("RemoveOne", args.ctx, args.key).Return(domain.ErrAliasNotFound)
+				th.repo.On("Remove", args.ctx, args.key).Return(domain.ErrAliasNotFound)
 				return nil
 			},
 			expectErr: domain.ErrAliasNotFound,
@@ -211,7 +233,7 @@ func TestService_RemoveOne(t *testing.T) {
 			t.Parallel()
 			th := NewTestHelper(t)
 			tt.mockFunc(th, tt.args)
-			err := th.service.RemoveOne(tt.args.ctx, tt.args.key)
+			err := th.service.Remove(tt.args.ctx, tt.args.key)
 			assert.ErrorIs(t, err, tt.expectErr)
 		})
 	}

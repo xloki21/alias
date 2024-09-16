@@ -1,4 +1,5 @@
-package alias
+//go:generate mockery
+package aliassvc
 
 import (
 	"context"
@@ -9,51 +10,48 @@ import (
 )
 
 const (
-	maxGoroutines = 10
 	keyLength     = 8
+	maxGoroutines = 10
 )
 
-// NewAliasService creates a new alias service
-func NewAliasService(aliasExpiredQ eventProducer, aliasUsedQ eventProducer, repo aliasRepo, keyGenerator keyGenerator) *Service {
-	return &Service{
-		aliasExpiredQ: aliasExpiredQ,
-		aliasUsedQ:    aliasUsedQ,
-		repo:          repo,
-		keyGenerator:  keyGenerator,
+type Alias struct {
+	repo         aliasRepo
+	expiredQ     eventProducer
+	usedQ        eventProducer
+	keyGenerator keyGenerator
+}
+
+// NewAlias creates a new alias service
+func NewAlias(expiredQ eventProducer, usedQ eventProducer, repo aliasRepo, keyGenerator keyGenerator) *Alias {
+	return &Alias{
+		expiredQ:     expiredQ,
+		usedQ:        usedQ,
+		repo:         repo,
+		keyGenerator: keyGenerator,
 	}
 }
 
-//go:generate mockery --name=aliasRepo --exported --output ./mocks --filename=alias_repo.go
 type aliasRepo interface {
-	SaveMany(ctx context.Context, aliases []domain.Alias) error
-	FindOne(ctx context.Context, key string) (*domain.Alias, error)
-	RemoveOne(ctx context.Context, key string) error
+	Save(ctx context.Context, aliases []domain.Alias) error
+	Find(ctx context.Context, key string) (*domain.Alias, error)
+	Remove(ctx context.Context, key string) error
 }
 
-//go:generate mockery --name=eventProducer  --exported --output ./mocks --filename=event_producer.go
 type eventProducer interface {
 	Produce(event any)
 }
 
-//go:generate mockery --name=keyGenerator  --exported --output ./mocks --filename=key_generator.go
 type keyGenerator interface {
 	Generate(n int) (string, error)
 }
 
-type Service struct {
-	repo          aliasRepo
-	aliasExpiredQ eventProducer
-	aliasUsedQ    eventProducer
-	keyGenerator  keyGenerator
+func (s *Alias) Name() string {
+	return "Alias"
 }
 
-func (s *Service) Name() string {
-	return "AliasService"
-}
-
-// CreateMany creates a set of shortened links for the given origin links
-func (s *Service) CreateMany(ctx context.Context, requests []domain.AliasCreationRequest) ([]domain.Alias, error) {
-	fn := "CreateMany"
+// Create creates a set of shortened links for the given origin links
+func (s *Alias) Create(ctx context.Context, requests []domain.AliasCreationRequest) ([]domain.Alias, error) {
+	fn := "Create"
 	zap.S().Infow("service",
 		zap.String("name", s.Name()),
 		zap.String("fn", fn),
@@ -113,7 +111,7 @@ func (s *Service) CreateMany(ctx context.Context, requests []domain.AliasCreatio
 		aliases[entry.index] = entry.alias
 	}
 
-	if err := s.repo.SaveMany(ctx, aliases); err != nil {
+	if err := s.repo.Save(ctx, aliases); err != nil {
 		zap.S().Errorw("service",
 			zap.String("name", s.Name()),
 			zap.String("fn", fn),
@@ -124,15 +122,14 @@ func (s *Service) CreateMany(ctx context.Context, requests []domain.AliasCreatio
 	return aliases, nil
 }
 
-// FindOne finds the alias link
-func (s *Service) FindOne(ctx context.Context, key string) (*domain.Alias, error) {
-	fn := "FindOne"
-
+// FindByKey finds the alias link
+func (s *Alias) FindByKey(ctx context.Context, key string) (*domain.Alias, error) {
+	fn := "FindByKey"
 	zap.S().Infow("service",
 		zap.String("name", s.Name()),
 		zap.String("fn", fn),
 		zap.String("key", key))
-	alias, err := s.repo.FindOne(ctx, key)
+	alias, err := s.repo.Find(ctx, key)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", fn, err)
 	}
@@ -145,7 +142,7 @@ func (s *Service) FindOne(ctx context.Context, key string) (*domain.Alias, error
 	if alias.Params.TriesLeft == 0 {
 		event := alias.Expired()
 
-		s.aliasExpiredQ.Produce(event)
+		s.expiredQ.Produce(event)
 
 		zap.S().Infow("service",
 			zap.String("name", s.Name()),
@@ -165,7 +162,7 @@ func (s *Service) FindOne(ctx context.Context, key string) (*domain.Alias, error
 	// publish event
 	event := alias.Redirected()
 
-	s.aliasUsedQ.Produce(event)
+	s.usedQ.Produce(event)
 
 	zap.S().Infow("service",
 		zap.String("name", s.Name()),
@@ -176,15 +173,15 @@ func (s *Service) FindOne(ctx context.Context, key string) (*domain.Alias, error
 	return alias, nil
 }
 
-// RemoveOne removes the alias link
-func (s *Service) RemoveOne(ctx context.Context, key string) error {
-	fn := "RemoveOne"
+// Remove removes the alias link
+func (s *Alias) Remove(ctx context.Context, key string) error {
+	fn := "Remove"
 	zap.S().Infow("service",
 		zap.String("name", s.Name()),
 		zap.String("fn", fn),
 		zap.String("key", key))
 
-	if err := s.repo.RemoveOne(ctx, key); err != nil {
+	if err := s.repo.Remove(ctx, key); err != nil {
 		return fmt.Errorf("%s: %w", fn, err)
 	}
 

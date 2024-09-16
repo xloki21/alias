@@ -5,16 +5,16 @@ import (
 	"errors"
 	"fmt"
 	"github.com/xloki21/alias/internal/app/config"
-	"github.com/xloki21/alias/internal/controller"
-	"github.com/xloki21/alias/internal/controller/mw"
+	"github.com/xloki21/alias/internal/controller/rest"
+	"github.com/xloki21/alias/internal/controller/rest/mw"
 	"github.com/xloki21/alias/internal/domain"
 	"github.com/xloki21/alias/internal/infrastructure/squeue"
 	"github.com/xloki21/alias/internal/repository"
 	"github.com/xloki21/alias/internal/repository/inmemory"
 	"github.com/xloki21/alias/internal/repository/mongodb"
-	"github.com/xloki21/alias/internal/service/alias"
-	"github.com/xloki21/alias/internal/service/manager"
-	"github.com/xloki21/alias/internal/service/stats"
+	"github.com/xloki21/alias/internal/services/aliassvc"
+	"github.com/xloki21/alias/internal/services/managersvc"
+	"github.com/xloki21/alias/internal/services/statssvc"
 	"github.com/xloki21/alias/pkg/keygen"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -45,14 +45,14 @@ const (
 type Application struct {
 	Address    string
 	Router     *http.ServeMux
-	Controller *controller.AliasController
+	Controller *rest.Controller
 }
 
 func New(cfg config.AppConfig) (*Application, error) {
 	ctx := context.Background()
 	baseURLPrefix := fmt.Sprintf("http://%s%s", cfg.Server.Address, endpointRedirect)
 
-	var aliasService *alias.Service
+	var aliasService *aliassvc.Alias
 
 	aliasUsedQ := squeue.New()
 	aliasExpiredQ := squeue.New()
@@ -91,35 +91,35 @@ func New(cfg config.AppConfig) (*Application, error) {
 			return nil, err
 		}
 
-		aliasRepoMongoDB := mongodb.NewMongoDBAliasRepository(db.Collection(mongodb.AliasCollectionName))
-		statsRepoMongoDB := mongodb.NewAliasStatsRepository(db.Collection(mongodb.StatsCollectionName))
-		aliasManagerSvc := manager.NewAliasManagerService(aliasRepoMongoDB, aliasUsedQ)
-		aliasManagerSvc.Process(ctx)
+		aliasRepo := mongodb.NewAliasRepository(db.Collection(mongodb.AliasCollectionName))
+		statsRepo := mongodb.NewStatisticsRepository(db.Collection(mongodb.StatsCollectionName))
+		managerSvc := managersvc.NewManager(aliasRepo, aliasUsedQ)
+		managerSvc.Process(ctx)
 
-		aliasStatsSvc := stats.NewAliasStatisticsService(statsRepoMongoDB, aliasExpiredQ)
-		aliasStatsSvc.Process(ctx)
+		statsSvc := statssvc.NewStatistics(statsRepo, aliasExpiredQ)
+		statsSvc.Process(ctx)
 
-		aliasService = alias.NewAliasService(aliasExpiredQ, aliasUsedQ, aliasRepoMongoDB, keyGen)
+		aliasService = aliassvc.NewAlias(aliasExpiredQ, aliasUsedQ, aliasRepo, keyGen)
 
 	case repository.InMemory:
 		zap.S().Info("using in-memory storage type")
-		aliasRepoInMemory := inmemory.NewAliasRepository()
-		statsRepoInMemory := inmemory.NewAliasStatsRepository()
+		aliasRepo := inmemory.NewAliasRepository()
+		statsRepo := inmemory.NewStatisticsRepository()
 
-		aliasManagerSvc := manager.NewAliasManagerService(aliasRepoInMemory, aliasUsedQ)
-		aliasManagerSvc.Process(ctx)
+		managerSvc := managersvc.NewManager(aliasRepo, aliasUsedQ)
+		managerSvc.Process(ctx)
 
-		aliasStatsSvc := stats.NewAliasStatisticsService(statsRepoInMemory, aliasExpiredQ)
-		aliasStatsSvc.Process(ctx)
+		statsSvc := statssvc.NewStatistics(statsRepo, aliasExpiredQ)
+		statsSvc.Process(ctx)
 
-		aliasService = alias.NewAliasService(aliasExpiredQ, aliasUsedQ, aliasRepoInMemory, keyGen)
+		aliasService = aliassvc.NewAlias(aliasExpiredQ, aliasUsedQ, aliasRepo, keyGen)
 
 	default:
 		zap.S().Fatalf("unknown storage type: %s", cfg.Storage.Type)
 		return nil, domain.ErrUnknownStorageType
 	}
 
-	ctrl := controller.NewAliasController(aliasService, baseURLPrefix)
+	ctrl := rest.NewController(aliasService, baseURLPrefix)
 
 	app := &Application{
 		Address:    cfg.Server.Address,

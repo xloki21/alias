@@ -9,12 +9,12 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/xloki21/alias/internal/domain"
-	"github.com/xloki21/alias/internal/service/alias"
+	"github.com/xloki21/alias/internal/services/aliassvc"
 	"github.com/xloki21/alias/internal/tests"
 	"testing"
 )
 
-func TestAliasService_CreateMany_MongoDB(t *testing.T) {
+func TestAlias_Create_MongoDB(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	container, db := tests.SetupMongoDBContainer(t, nil)
@@ -23,7 +23,7 @@ func TestAliasService_CreateMany_MongoDB(t *testing.T) {
 		require.NoError(t, err)
 	}(container, ctx)
 
-	aliasService := tests.NewAliasTestService(ctx, db)
+	aliasService := tests.NewTestAliasService(ctx, db)
 
 	type args struct {
 		ctx      context.Context
@@ -37,26 +37,26 @@ func TestAliasService_CreateMany_MongoDB(t *testing.T) {
 	}{
 		{
 			name:        "create multiple aliases with success",
-			args:        args{ctx: context.Background(), requests: alias.TestSetAliasCreationRequests(2000)},
+			args:        args{ctx: context.Background(), requests: aliassvc.TestSetAliasCreationRequests(2000)},
 			expectedErr: nil,
 		},
 	}
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			_, err := aliasService.CreateMany(testCase.args.ctx, testCase.args.requests)
+			_, err := aliasService.Create(testCase.args.ctx, testCase.args.requests)
 			assert.NoError(t, err)
 		})
 	}
 }
 
-func TestAliasService_FindOne_MongoDB(t *testing.T) {
+func TestAlias_FindByKey_MongoDB(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
 	testData := []domain.Alias{
-		alias.TestAlias(t, false),
-		alias.TestAlias(t, true),
+		aliassvc.TestAlias(t, false),
+		aliassvc.TestAlias(t, true),
 	}
 
 	container, db := tests.SetupMongoDBContainer(t, testData)
@@ -65,7 +65,7 @@ func TestAliasService_FindOne_MongoDB(t *testing.T) {
 		require.NoError(t, err)
 	}(container, ctx)
 
-	aliasService := tests.NewAliasTestService(ctx, db)
+	aliasService := tests.NewTestAliasService(ctx, db)
 
 	type args struct {
 		ctx context.Context
@@ -100,7 +100,7 @@ func TestAliasService_FindOne_MongoDB(t *testing.T) {
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			got, err := aliasService.FindOne(ctx, testCase.args.key)
+			got, err := aliasService.FindByKey(ctx, testCase.args.key)
 			assert.ErrorIs(t, err, testCase.expectedErr)
 			if testCase.wants != nil {
 				assert.Equal(t, testCase.wants.URL, got.URL)
@@ -109,13 +109,13 @@ func TestAliasService_FindOne_MongoDB(t *testing.T) {
 	}
 }
 
-func TestAliasService_RemoveOne_MongoDB(t *testing.T) {
+func TestAlias_Remove_MongoDB(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
 	testData := []domain.Alias{
-		alias.TestAlias(t, false),
-		alias.TestAlias(t, true),
+		aliassvc.TestAlias(t, false),
+		aliassvc.TestAlias(t, true),
 	}
 
 	container, db := tests.SetupMongoDBContainer(t, testData)
@@ -124,7 +124,7 @@ func TestAliasService_RemoveOne_MongoDB(t *testing.T) {
 		require.NoError(t, err)
 	}(container, ctx)
 
-	aliasService := tests.NewAliasTestService(ctx, db)
+	aliasService := tests.NewTestAliasService(ctx, db)
 
 	type args struct {
 		ctx context.Context
@@ -150,7 +150,7 @@ func TestAliasService_RemoveOne_MongoDB(t *testing.T) {
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			err := aliasService.RemoveOne(testCase.args.ctx, testCase.args.key)
+			err := aliasService.Remove(testCase.args.ctx, testCase.args.key)
 			assert.ErrorIs(t, err, testCase.expectedErr)
 		})
 	}

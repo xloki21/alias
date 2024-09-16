@@ -15,25 +15,29 @@ type eventDocument struct {
 	URL        *url.URL  `bson:"url"`
 }
 
-type AliasStatsRepository struct {
+type StatisticsRepository struct {
 	collection *mongo.Collection
 }
 
-// NewAliasStatsRepository creates a new AliasStatsRepository
-func NewAliasStatsRepository(collection *mongo.Collection) *AliasStatsRepository {
-	return &AliasStatsRepository{
+// NewStatisticsRepository creates a new StatisticsRepository
+func NewStatisticsRepository(collection *mongo.Collection) *StatisticsRepository {
+	return &StatisticsRepository{
 		collection: collection,
 	}
 }
 
+func (r *StatisticsRepository) Name() string {
+	return "mongodb::StatisticsRepository"
+}
+
 // PushStats pushes data with statistics into collection
-func (r *AliasStatsRepository) PushStats(ctx context.Context, event domain.AliasExpired) error {
-	const fn = "mongodb::PushEvent"
+func (r *StatisticsRepository) PushStats(ctx context.Context, event domain.AliasExpired) error {
+	const fn = "PushEvent"
 	zap.S().Infow("repo",
-		zap.String("name", "NewAliasStatsRepository"),
+		zap.String("name", r.Name()),
 		zap.String("fn", fn),
 		zap.String("event", event.String()),
-	)
+		zap.String("alias key", event.Key))
 	newEventDoc := eventDocument{
 		OccurredAt: event.OccurredAt,
 		Key:        event.Key,

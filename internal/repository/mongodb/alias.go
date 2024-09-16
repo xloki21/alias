@@ -28,32 +28,26 @@ type AliasDTO struct {
 	TriesLeft   int      `bson:"tries_left,omitempty"`
 }
 
-func NewAliasDTO(alias domain.Alias) AliasDTO {
-	return AliasDTO{
-		Key:         alias.Key,
-		URL:         alias.URL,
-		IsActive:    alias.IsActive,
-		IsPermanent: alias.Params.IsPermanent,
-		TriesLeft:   alias.Params.TriesLeft,
-	}
-}
-
 type AliasRepository struct {
 	collection *mongo.Collection
 }
 
-// NewMongoDBAliasRepository creates a new AliasRepository
-func NewMongoDBAliasRepository(collection *mongo.Collection) *AliasRepository {
+// NewAliasRepository creates a new AliasRepository
+func NewAliasRepository(collection *mongo.Collection) *AliasRepository {
 	return &AliasRepository{
 		collection: collection,
 	}
 }
 
-// SaveMany saves many aliases in bulk
-func (a *AliasRepository) SaveMany(ctx context.Context, aliases []domain.Alias) error {
-	const fn = "mongodb::SaveMany"
+func (r *AliasRepository) Name() string {
+	return "mongodb::AliasRepository"
+}
+
+// Save saves aliases in storage
+func (a *AliasRepository) Save(ctx context.Context, aliases []domain.Alias) error {
+	const fn = "Save"
 	zap.S().Infow("repo",
-		zap.String("name", "AliasRepository"),
+		zap.String("name", a.Name()),
 		zap.String("fn", fn),
 		zap.Int("aliases count", len(aliases)))
 
@@ -77,11 +71,11 @@ func (a *AliasRepository) SaveMany(ctx context.Context, aliases []domain.Alias) 
 	return nil
 }
 
-// FindOne gets the alias by key
-func (a *AliasRepository) FindOne(ctx context.Context, key string) (*domain.Alias, error) {
-	const fn = "mongodb::FindOne"
+// Find gets the alias by key
+func (a *AliasRepository) Find(ctx context.Context, key string) (*domain.Alias, error) {
+	const fn = "Find"
 	zap.S().Infow("repo",
-		zap.String("name", "AliasRepository"),
+		zap.String("name", a.Name()),
 		zap.String("fn", fn),
 		zap.String("key", key))
 
@@ -116,9 +110,9 @@ func (a *AliasRepository) FindOne(ctx context.Context, key string) (*domain.Alia
 
 // DecreaseTTLCounter decreases the alias redirect counter
 func (a *AliasRepository) DecreaseTTLCounter(ctx context.Context, key string) error {
-	const fn = "mongodb::DecreaseTTLCounter"
+	const fn = "DecreaseTTLCounter"
 	zap.S().Infow("repo",
-		zap.String("name", "AliasRepository"),
+		zap.String("name", a.Name()),
 		zap.String("fn", fn),
 		zap.String("key", key))
 
@@ -157,11 +151,11 @@ func (a *AliasRepository) DecreaseTTLCounter(ctx context.Context, key string) er
 	return nil
 }
 
-// RemoveOne deletes a shortened link
-func (a *AliasRepository) RemoveOne(ctx context.Context, key string) error {
-	const fn = "mongodb::RemoveOne"
+// Remove deletes a shortened link
+func (a *AliasRepository) Remove(ctx context.Context, key string) error {
+	const fn = "Remove"
 	zap.S().Infow("repo",
-		zap.String("name", "AliasRepository"),
+		zap.String("name", a.Name()),
 		zap.String("fn", fn),
 		zap.String("key", key))
 

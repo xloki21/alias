@@ -1,4 +1,4 @@
-package controller
+package rest
 
 import (
 	"context"
@@ -16,21 +16,35 @@ import (
 const maxGoroutines = 10
 
 type aliasService interface {
-	CreateMany(ctx context.Context, requests []domain.AliasCreationRequest) ([]domain.Alias, error)
-	FindOne(ctx context.Context, key string) (*domain.Alias, error)
-	RemoveOne(ctx context.Context, key string) error
+	Create(ctx context.Context, requests []domain.AliasCreationRequest) ([]domain.Alias, error)
+	FindByKey(ctx context.Context, key string) (*domain.Alias, error)
+	Remove(ctx context.Context, key string) error
 }
 
-type AliasController struct {
+type requestURLList struct {
+	URLs []string `json:"urls"`
+}
+
+type responseURLList struct {
+	URLs []string `json:"urls"`
+}
+
+// helper struct to keep order of the validated URL's
+type indexedResult struct {
+	index   int
+	request domain.AliasCreationRequest
+}
+
+type Controller struct {
 	address string
 	service aliasService
 }
 
-func NewAliasController(service aliasService, address string) *AliasController {
-	return &AliasController{service: service, address: address}
+func NewController(service aliasService, address string) *Controller {
+	return &Controller{service: service, address: address}
 }
 
-func (ac *AliasController) CreateAlias(w http.ResponseWriter, r *http.Request) {
+func (ac *Controller) CreateAlias(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 		return
@@ -72,12 +86,6 @@ func (ac *AliasController) CreateAlias(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// helper struct to keep order of the validated URL's
-	type indexedResult struct {
-		index   int
-		request domain.AliasCreationRequest
-	}
-
 	// validate request
 	wg := sync.WaitGroup{}
 	semaphore := make(chan struct{}, maxGoroutines)
@@ -117,7 +125,7 @@ func (ac *AliasController) CreateAlias(w http.ResponseWriter, r *http.Request) {
 		requests[entry.index] = entry.request
 	}
 
-	aliases, err := ac.service.CreateMany(r.Context(), requests)
+	aliases, err := ac.service.Create(r.Context(), requests)
 	if err != nil {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
@@ -143,13 +151,13 @@ func (ac *AliasController) CreateAlias(w http.ResponseWriter, r *http.Request) {
 	return
 }
 
-func (ac *AliasController) Redirect(w http.ResponseWriter, r *http.Request) {
+func (ac *Controller) Redirect(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 		return
 	}
 	key := r.PathValue("key")
-	alias, err := ac.service.FindOne(r.Context(), key)
+	alias, err := ac.service.FindByKey(r.Context(), key)
 	if err != nil {
 		if errors.Is(err, domain.ErrAliasNotFound) {
 			http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
@@ -164,14 +172,14 @@ func (ac *AliasController) Redirect(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, alias.URL.String(), http.StatusTemporaryRedirect)
 }
 
-func (ac *AliasController) RemoveAlias(w http.ResponseWriter, r *http.Request) {
+func (ac *Controller) RemoveAlias(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodDelete {
 		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 		return
 	}
 	key := r.PathValue("key")
 
-	if err := ac.service.RemoveOne(r.Context(), key); err != nil {
+	if err := ac.service.Remove(r.Context(), key); err != nil {
 		if errors.Is(err, domain.ErrAliasNotFound) {
 			http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 		} else {
@@ -183,6 +191,6 @@ func (ac *AliasController) RemoveAlias(w http.ResponseWriter, r *http.Request) {
 }
 
 // Healthcheck endpoint
-func (ac *AliasController) Healthcheck(w http.ResponseWriter, r *http.Request) {
+func (ac *Controller) Healthcheck(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }

@@ -12,13 +12,17 @@ type AliasRepository struct {
 	db map[string]*domain.Alias
 }
 
-// SaveMany saves many aliases in one run
-func (a *AliasRepository) SaveMany(ctx context.Context, aliases []domain.Alias) error {
-	const fn = "in-memory::SaveMany"
+func (a *AliasRepository) Name() string {
+	return "in-memory::AliasRepository"
+}
+
+// Save saves many aliases in one run
+func (a *AliasRepository) Save(ctx context.Context, aliases []domain.Alias) error {
+	const fn = "Save"
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	zap.S().Infow("repo",
-		zap.String("name", "AliasRepository"),
+		zap.String("name", a.Name()),
 		zap.String("fn", fn),
 		zap.Int("alias count", len(aliases)))
 	for _, alias := range aliases {
@@ -27,11 +31,11 @@ func (a *AliasRepository) SaveMany(ctx context.Context, aliases []domain.Alias) 
 	return nil
 }
 
-// FindOne gets the target link from the shortened one
-func (a *AliasRepository) FindOne(ctx context.Context, key string) (*domain.Alias, error) {
-	const fn = "in-memory::FindOne"
+// Find gets the target link from the shortened one
+func (a *AliasRepository) Find(ctx context.Context, key string) (*domain.Alias, error) {
+	const fn = "Find"
 	zap.S().Infow("repo",
-		zap.String("name", "AliasRepository"),
+		zap.String("name", a.Name()),
 		zap.String("fn", fn),
 		zap.String("key", key))
 
@@ -44,11 +48,11 @@ func (a *AliasRepository) FindOne(ctx context.Context, key string) (*domain.Alia
 	}
 }
 
-// RemoveOne removes a shortened link
-func (a *AliasRepository) RemoveOne(ctx context.Context, key string) error {
-	const fn = "in-memory::RemoveOne"
+// Remove removes a shortened link
+func (a *AliasRepository) Remove(ctx context.Context, key string) error {
+	const fn = "Remove"
 	zap.S().Infow("repo",
-		zap.String("name", "AliasRepository"),
+		zap.String("name", a.Name()),
 		zap.String("fn", fn),
 		zap.String("key", key))
 	a.mu.Lock()
@@ -62,9 +66,9 @@ func (a *AliasRepository) RemoveOne(ctx context.Context, key string) error {
 }
 
 func (a *AliasRepository) DecreaseTTLCounter(ctx context.Context, key string) error {
-	const fn = "in-memory::DecreaseTTLCounter"
+	const fn = "DecreaseTTLCounter"
 	zap.S().Infow("repo",
-		zap.String("name", "AliasRepository"),
+		zap.String("name", a.Name()),
 		zap.String("fn", fn),
 		zap.String("id", key))
 	a.mu.Lock()

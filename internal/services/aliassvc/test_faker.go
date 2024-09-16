@@ -1,37 +1,15 @@
-package alias
+package aliassvc
 
 import (
 	"fmt"
 	"github.com/stretchr/testify/assert"
 	"github.com/xloki21/alias/internal/domain"
-	"github.com/xloki21/alias/internal/service/alias/mocks"
 	"github.com/xloki21/alias/pkg/keygen"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"math/rand"
 	"net/url"
 	"testing"
 )
-
-type TestHelper struct {
-	aliasExpiredQ *mocks.EventProducer
-	aliasUsedQ    *mocks.EventProducer
-	repo          *mocks.AliasRepo
-	keyGen        *mocks.KeyGenerator
-	service       *Service
-}
-
-func NewTestHelper(t *testing.T) *TestHelper {
-	repo := mocks.NewAliasRepo(t)
-	aliasExpiredQ := mocks.NewEventProducer(t)
-	aliasUsedQ := mocks.NewEventProducer(t)
-	keyGen := mocks.NewKeyGenerator(t)
-	return &TestHelper{
-		aliasExpiredQ: aliasExpiredQ,
-		aliasUsedQ:    aliasUsedQ,
-		repo:          repo,
-		keyGen:        keyGen,
-		service:       NewAliasService(aliasExpiredQ, aliasUsedQ, repo, keyGen)}
-}
 
 func TestSetAliasCreationRequests(quantity int) []domain.AliasCreationRequest {
 	requests := make([]domain.AliasCreationRequest, quantity)

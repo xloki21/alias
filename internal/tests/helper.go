@@ -2,7 +2,6 @@ package tests
 
 import (
 	"context"
-	"fmt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
@@ -10,9 +9,9 @@ import (
 	"github.com/xloki21/alias/internal/domain"
 	"github.com/xloki21/alias/internal/infrastructure/squeue"
 	"github.com/xloki21/alias/internal/repository/mongodb"
-	"github.com/xloki21/alias/internal/service/alias"
-	"github.com/xloki21/alias/internal/service/manager"
-	"github.com/xloki21/alias/internal/service/stats"
+	"github.com/xloki21/alias/internal/services/aliassvc"
+	"github.com/xloki21/alias/internal/services/managersvc"
+	"github.com/xloki21/alias/internal/services/statssvc"
 	"github.com/xloki21/alias/pkg/keygen"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -23,13 +22,13 @@ import (
 
 const (
 	aliasAppDatabase = "appdb"
-	tag              = "7.0.6"
+	image            = "mongo:7.0.6"
 )
 
 func SetupMongoDBContainer(t *testing.T, testData []domain.Alias) (testcontainers.Container, *mongo.Database) {
 	ctx := context.Background()
 
-	mongodbContainer, err := tc.Run(ctx, fmt.Sprintf("mongo:%s", tag))
+	mongodbContainer, err := tc.Run(ctx, image)
 	require.NoError(t, err)
 
 	connstr, err := mongodbContainer.ConnectionString(ctx)
@@ -73,20 +72,20 @@ func SetupMongoDBContainer(t *testing.T, testData []domain.Alias) (testcontainer
 	return mongodbContainer, db
 }
 
-func NewAliasTestService(ctx context.Context, db *mongo.Database) *alias.Service {
-	aliasUsedQ := squeue.New()
-	aliasExpiredQ := squeue.New()
+func NewTestAliasService(ctx context.Context, db *mongo.Database) *aliassvc.Alias {
+	usedQ := squeue.New()
+	expiredQ := squeue.New()
 
-	aliasRepoMongoDB := mongodb.NewMongoDBAliasRepository(db.Collection(mongodb.AliasCollectionName))
-	statsRepoMongoDB := mongodb.NewAliasStatsRepository(db.Collection(mongodb.StatsCollectionName))
-	aliasManagerSvc := manager.NewAliasManagerService(aliasRepoMongoDB, aliasUsedQ)
-	aliasManagerSvc.Process(ctx)
+	aliasRepo := mongodb.NewAliasRepository(db.Collection(mongodb.AliasCollectionName))
+	statsRepo := mongodb.NewStatisticsRepository(db.Collection(mongodb.StatsCollectionName))
+	managerSvc := managersvc.NewManager(aliasRepo, usedQ)
+	managerSvc.Process(ctx)
 
-	aliasStatsSvc := stats.NewAliasStatisticsService(statsRepoMongoDB, aliasExpiredQ)
-	aliasStatsSvc.Process(ctx)
+	statsSvc := statssvc.NewStatistics(statsRepo, expiredQ)
+	statsSvc.Process(ctx)
 
 	keyGen := keygen.NewURLSafeRandomStringGenerator()
 
-	aliasService := alias.NewAliasService(aliasExpiredQ, aliasUsedQ, aliasRepoMongoDB, keyGen)
+	aliasService := aliassvc.NewAlias(expiredQ, usedQ, aliasRepo, keyGen)
 	return aliasService
 }

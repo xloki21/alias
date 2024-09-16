@@ -1,3 +1,6 @@
+//go:build e2e
+// +build e2e
+
 package e2e
 
 import (
@@ -8,8 +11,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/xloki21/alias/internal/app"
-	"github.com/xloki21/alias/internal/controller"
-	"github.com/xloki21/alias/internal/controller/mw"
+	"github.com/xloki21/alias/internal/controller/rest"
+	"github.com/xloki21/alias/internal/controller/rest/mw"
 	"github.com/xloki21/alias/internal/tests"
 	"go.uber.org/zap"
 	"io"
@@ -39,8 +42,8 @@ func TestApi_e2e(t *testing.T) {
 		require.NoError(t, err)
 	}(container, ctx)
 
-	service := tests.NewAliasTestService(ctx, db)
-	ctrl := controller.NewAliasController(service, fmt.Sprintf("http://%s", testAppAddress))
+	service := tests.NewTestAliasService(ctx, db)
+	ctrl := rest.NewController(service, fmt.Sprintf("http://%s", testAppAddress))
 
 	mux := http.NewServeMux()
 	mux.HandleFunc(testEndpointAlias, mw.Use(ctrl.CreateAlias, mw.RequestThrottler, mw.Logging, mw.PanicRecovery))
@@ -64,14 +67,14 @@ func TestApi_e2e(t *testing.T) {
 
 	endpointAliasTarget := fmt.Sprintf("http://%s%s", application.Address, testEndpointAlias)
 
-	t.Run("CreateAlias should be ok", func(t *testing.T) {
+	t.Run("Create aliases should be ok", func(t *testing.T) {
 		resp, err := client.Post(endpointAliasTarget,
 			"application/json", strings.NewReader("{\"urls\": [\"http://www.ya.ru\"]}"))
 		assert.NoError(t, err)
 		assert.Equal(t, http.StatusCreated, resp.StatusCode)
 
 	})
-	t.Run("CreateAlias should fail: request body is invalid", func(t *testing.T) {
+	t.Run("Create aliases should fail: request body is invalid", func(t *testing.T) {
 		resp, err := client.Post(endpointAliasTarget,
 			"application/json", strings.NewReader("{\"fail-key\": [\"http://www.ya.ru\"]}"))
 		assert.NoError(t, err)
@@ -79,7 +82,7 @@ func TestApi_e2e(t *testing.T) {
 
 	})
 
-	t.Run("CreateAlias should fail: request body is empty", func(t *testing.T) {
+	t.Run("Create aliases should fail: request body is empty", func(t *testing.T) {
 		resp, err := client.Post(endpointAliasTarget,
 			"application/json", nil)
 		assert.NoError(t, err)
