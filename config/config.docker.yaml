@@ -1,5 +1,6 @@
-server:
-  address: alias:8080
+service:
+  http: alias:8080
+  grpc: alias:8081
 storage:
   type: mongodb # in-memory | mongodb
   config:

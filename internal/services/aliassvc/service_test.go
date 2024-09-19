@@ -39,7 +39,7 @@ func TestAlias_Create(t *testing.T) {
 	t.Parallel()
 	type args struct {
 		ctx      context.Context
-		requests []domain.AliasCreationRequest
+		requests []domain.CreateRequest
 	}
 
 	testCases := []struct {

@@ -19,8 +19,8 @@ type Alias struct {
 	Params   TTLParams
 }
 
-// AliasCreationRequest is a struct that represents an alias creation request.
-type AliasCreationRequest struct {
+// CreateRequest is a struct that represents an alias creation request.
+type CreateRequest struct {
 	Params TTLParams
 	URL    *url.URL
 }

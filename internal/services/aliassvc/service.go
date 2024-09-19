@@ -50,7 +50,7 @@ func (s *Alias) Name() string {
 }
 
 // Create creates a set of shortened links for the given origin links
-func (s *Alias) Create(ctx context.Context, requests []domain.AliasCreationRequest) ([]domain.Alias, error) {
+func (s *Alias) Create(ctx context.Context, requests []domain.CreateRequest) ([]domain.Alias, error) {
 	fn := "Create"
 	zap.S().Infow("service",
 		zap.String("name", s.Name()),
@@ -99,10 +99,12 @@ func (s *Alias) Create(ctx context.Context, requests []domain.AliasCreationReque
 
 	for err := range errChan {
 		if err != nil {
-			zap.S().Errorw("service",
-				zap.String("name", s.Name()),
-				zap.String("fn", fn),
-				zap.Error(err))
+			zap.S().WithOptions(zap.AddStacktrace(zap.PanicLevel)).
+				Errorw("service",
+					zap.String("name", s.Name()),
+					zap.String("fn", fn),
+					zap.Error(err),
+				)
 			return nil, err
 		}
 	}
@@ -112,10 +114,14 @@ func (s *Alias) Create(ctx context.Context, requests []domain.AliasCreationReque
 	}
 
 	if err := s.repo.Save(ctx, aliases); err != nil {
-		zap.S().Errorw("service",
-			zap.String("name", s.Name()),
-			zap.String("fn", fn),
-			zap.Error(err))
+
+		zap.S().WithOptions(zap.AddStacktrace(zap.PanicLevel)).
+			Errorw("service",
+				zap.String("name", s.Name()),
+				zap.String("fn", fn),
+				zap.Error(err),
+				zap.Any("aliases", aliases),
+			)
 		return nil, err
 	}
 

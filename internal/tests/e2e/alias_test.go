@@ -25,15 +25,15 @@ import (
 )
 
 const (
-	testAppAddress          = "localhost:8080"
-	testApiV1               = "/api/v1"
-	testEndpointAlias       = testApiV1 + "/alias"
-	testEndpointHealthcheck = testApiV1 + "/healthcheck"
-	testEndpointRedirect    = ""
+	testAppHttpServiceAddress = "localhost:8080"
+	baseUrlPrefix             = "http://" + testAppHttpServiceAddress
+	testApiV1                 = "/api/v1"
+	testEndpointAlias         = testApiV1 + "/alias"
+	testEndpointHealthcheck   = testApiV1 + "/healthcheck"
+	testEndpointRedirect      = ""
 )
 
 func TestApi_e2e(t *testing.T) {
-	t.Parallel()
 	ctx := context.Background()
 
 	container, db := tests.SetupMongoDBContainer(t, nil)
@@ -43,7 +43,7 @@ func TestApi_e2e(t *testing.T) {
 	}(container, ctx)
 
 	service := tests.NewTestAliasService(ctx, db)
-	ctrl := rest.NewController(service, fmt.Sprintf("http://%s", testAppAddress))
+	ctrl := rest.NewController(service, baseUrlPrefix)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc(testEndpointAlias, mw.Use(ctrl.CreateAlias, mw.RequestThrottler, mw.Logging, mw.PanicRecovery))
@@ -52,20 +52,21 @@ func TestApi_e2e(t *testing.T) {
 	mux.HandleFunc(testEndpointRedirect+"/{key}", mw.Use(ctrl.Redirect, mw.RequestThrottler, mw.Logging, mw.PanicRecovery))
 
 	application := &app.Application{
-		Address:    testAppAddress,
-		Router:     mux,
-		Controller: ctrl,
+		HttpServer: &http.Server{
+			Addr:    testAppHttpServiceAddress,
+			Handler: mux,
+		},
 	}
 
 	go func() {
-		if err := application.Run(context.Background()); err != nil {
+		if err := application.Run(ctx); err != nil {
 			zap.S().Fatal("failed to start application", zap.Error(err))
 		}
 	}()
 
 	client := &http.Client{Timeout: 10 * time.Second}
 
-	endpointAliasTarget := fmt.Sprintf("http://%s%s", application.Address, testEndpointAlias)
+	endpointAliasTarget := fmt.Sprintf("http://%s%s", testAppHttpServiceAddress, testEndpointAlias)
 
 	t.Run("Create aliases should be ok", func(t *testing.T) {
 		resp, err := client.Post(endpointAliasTarget,
@@ -141,7 +142,7 @@ func TestApi_e2e(t *testing.T) {
 
 	t.Run("Redirect should be ok", func(t *testing.T) {
 		resp, err := client.Post(
-			fmt.Sprintf("http://%s%s", application.Address, testEndpointAlias),
+			fmt.Sprintf("http://%s%s", testAppHttpServiceAddress, testEndpointAlias),
 			"application/json", strings.NewReader("{\"urls\": [\"http://www.ya.ru\"]}"))
 		assert.NoError(t, err)
 		assert.Equal(t, http.StatusCreated, resp.StatusCode)
@@ -166,7 +167,7 @@ func TestApi_e2e(t *testing.T) {
 	t.Run("Redirect should fail after alias has been expired", func(t *testing.T) {
 		maxUsageCount := 3
 		resp, err := client.Post(
-			fmt.Sprintf("http://%s%s?maxUsageCount=%d", application.Address, testEndpointAlias, maxUsageCount),
+			fmt.Sprintf("http://%s%s?maxUsageCount=%d", testAppHttpServiceAddress, testEndpointAlias, maxUsageCount),
 			"application/json", strings.NewReader("{\"urls\": [\"http://www.ya.ru\"]}"))
 		assert.NoError(t, err)
 		assert.Equal(t, http.StatusCreated, resp.StatusCode)

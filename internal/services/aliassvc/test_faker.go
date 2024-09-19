@@ -11,8 +11,8 @@ import (
 	"testing"
 )
 
-func TestSetAliasCreationRequests(quantity int) []domain.AliasCreationRequest {
-	requests := make([]domain.AliasCreationRequest, quantity)
+func TestSetAliasCreationRequests(quantity int) []domain.CreateRequest {
+	requests := make([]domain.CreateRequest, quantity)
 
 	for i := 0; i < quantity; i++ {
 		triesLeft := rand.Intn(10)
@@ -20,7 +20,7 @@ func TestSetAliasCreationRequests(quantity int) []domain.AliasCreationRequest {
 		if triesLeft == 0 {
 			isPermanent = false
 		}
-		requests[i] = domain.AliasCreationRequest{
+		requests[i] = domain.CreateRequest{
 			URL: &url.URL{
 				Scheme: "http",
 				Host:   fmt.Sprintf("host%d.test", i),

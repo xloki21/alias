@@ -27,7 +27,7 @@ func TestAlias_Create_MongoDB(t *testing.T) {
 
 	type args struct {
 		ctx      context.Context
-		requests []domain.AliasCreationRequest
+		requests []domain.CreateRequest
 	}
 
 	testCases := []struct {

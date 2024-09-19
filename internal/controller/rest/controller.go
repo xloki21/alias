@@ -16,7 +16,7 @@ import (
 const maxGoroutines = 10
 
 type aliasService interface {
-	Create(ctx context.Context, requests []domain.AliasCreationRequest) ([]domain.Alias, error)
+	Create(ctx context.Context, requests []domain.CreateRequest) ([]domain.Alias, error)
 	FindByKey(ctx context.Context, key string) (*domain.Alias, error)
 	Remove(ctx context.Context, key string) error
 }
@@ -32,7 +32,7 @@ type responseURLList struct {
 // helper struct to keep order of the validated URL's
 type indexedResult struct {
 	index   int
-	request domain.AliasCreationRequest
+	request domain.CreateRequest
 }
 
 type Controller struct {
@@ -100,7 +100,7 @@ func (ac *Controller) CreateAlias(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				errChan <- err
 			}
-			resultChan <- indexedResult{index: index, request: domain.AliasCreationRequest{
+			resultChan <- indexedResult{index: index, request: domain.CreateRequest{
 				Params: domain.TTLParams{TriesLeft: triesLeftValue, IsPermanent: isPermanent},
 				URL:    validURL,
 			}}
@@ -120,7 +120,7 @@ func (ac *Controller) CreateAlias(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	requests := make([]domain.AliasCreationRequest, len(payload.URLs), len(payload.URLs))
+	requests := make([]domain.CreateRequest, len(payload.URLs), len(payload.URLs))
 	for entry := range resultChan {
 		requests[entry.index] = entry.request
 	}

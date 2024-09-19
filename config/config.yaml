@@ -1,5 +1,6 @@
-server:
-  address: localhost:8080
+service:
+  http: localhost:8080
+  grpc: localhost:8081
 storage:
   type: mongodb # in-memory | mongodb
   config:

@@ -13,8 +13,9 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-type Server struct {
-	Address string `mapstructure:"address"`
+type Service struct {
+	HTTP string `mapstructure:"http"`
+	GRPC string `mapstructure:"grpc"`
 }
 
 type LoggerConfig struct {
@@ -40,7 +41,7 @@ type StorageConfig struct {
 }
 
 type AppConfig struct {
-	Server       Server        `mapstructure:"server"`
+	Service      Service       `mapstructure:"service"`
 	Storage      StorageConfig `mapstructure:"storage"`
 	LoggerConfig LoggerConfig  `mapstructure:"logger"`
 }
@@ -59,6 +60,7 @@ func NewZapLogger(cfg LoggerConfig) (*zap.Logger, error) {
 	}
 
 	zcfg.Level = zap.NewAtomicLevelAt(parsedLevel)
+
 	return zcfg.Build()
 }
 
@@ -74,7 +76,8 @@ func MustLoad() (AppConfig, error) {
 		fmt.Printf("no config file found, using defaults\n")
 		var configFileNotFoundError viper.ConfigFileNotFoundError
 		if errors.As(err, &configFileNotFoundError) {
-			viper.SetDefault("server.address", "localhost:8080")
+			viper.SetDefault("service.http", "localhost:8080")
+			viper.SetDefault("service.grpc", "localhost:8081")
 			viper.SetDefault("storage.type", repository.InMemory)
 			viper.SetDefault("logger.level", "info")
 			viper.SetDefault("logger.encoding", "json")

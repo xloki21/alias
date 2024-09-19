@@ -9,7 +9,6 @@ tasks:
     cmd: go build -o aliassrv -v ./cmd/main.go
     desc: "Build app"
 
-
   coverage:
     cmds:
       - go test -coverprofile=coverage.out ./...
@@ -85,6 +84,7 @@ tasks:
         else
           echo "protoc-gen-grpc-gateway is already installed"
         fi
+
   grpc-download-vendor-protos:
     cmds:
       - echo "Cloning Google APIs repo"
@@ -93,6 +93,32 @@ tasks:
       - echo "Cloning gRPC-Gateway repo"
       - git clone https://github.com/grpc-ecosystem/grpc-gateway.git vendor-proto/grpc-gateway
     desc: "Clone full Google API and gRPC-Gateway proto repositories"
+
+  grpc-generate-proto:
+    cmds:
+      - echo "Generating gRPC and gRPC-Gateway code"
+      -
+      - mkdir -p internal/gen/go
+      - |
+        protoc --proto_path=internal/api/ \
+               --proto_path=vendor-proto/googleapis \
+               --proto_path=vendor-proto/grpc-gateway \
+               --go_out=internal/gen/go \
+               --go-grpc_out=internal/gen/go \
+               --grpc-gateway_out=internal/gen/go \
+               internal/api/api.proto
+      - echo "Generating OpenAPI (Swagger) definitions with openapiv2"
+      - mkdir -p internal/gen/swagger
+      - |
+        protoc --proto_path=internal/api/ \
+               --proto_path=vendor-proto/googleapis \
+               --proto_path=vendor-proto/grpc-gateway \
+               --openapiv2_out=internal/gen/swagger \
+               --openapiv2_opt=logtostderr=true,allow_merge=true,merge_file_name=alias \
+               internal/api/api.proto
+    deps:
+      - grpc-ensure-protoc
+      - grpc-ensure-plugins
 
   clean:
     cmds:

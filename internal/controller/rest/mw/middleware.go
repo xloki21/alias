@@ -27,13 +27,24 @@ func Logging(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 
-		zap.S().Infow("http",
+		zap.S().Infow("HTTP",
 			zap.String("request", r.Method),
+			zap.String("status", "received"),
 			zap.String("uri", r.RequestURI))
 
 		next(w, r)
-		zap.S().Infow("http",
-			zap.String("request.completed", fmt.Sprintf("%dms", time.Since(start).Milliseconds())))
+
+		duration := time.Since(start)
+
+		durationString := fmt.Sprintf("%dms", duration.Milliseconds())
+		if duration.Milliseconds() < 2 {
+			durationString = fmt.Sprintf("%dμs", duration.Microseconds())
+		}
+
+		zap.S().Infow("HTTP",
+			zap.String("request", r.Method),
+			zap.String("status", "processed"),
+			zap.String("duration", durationString))
 	}
 }
 
