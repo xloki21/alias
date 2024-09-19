@@ -1,6 +1,7 @@
 service:
   http: localhost:8080
   grpc: localhost:8081
+  grpc-gateway: localhost:8082
 storage:
   type: mongodb # in-memory | mongodb
   config:

@@ -4,7 +4,6 @@ import (
 	"context"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/testcontainers/testcontainers-go"
 	tc "github.com/testcontainers/testcontainers-go/modules/mongodb"
 	"github.com/xloki21/alias/internal/domain"
 	"github.com/xloki21/alias/internal/infrastructure/squeue"
@@ -25,7 +24,7 @@ const (
 	image            = "mongo:7.0.6"
 )
 
-func SetupMongoDBContainer(t *testing.T, testData []domain.Alias) (testcontainers.Container, *mongo.Database) {
+func SetupMongoDBContainer(t *testing.T, testData []domain.Alias) (*tc.MongoDBContainer, *mongo.Database) {
 	ctx := context.Background()
 
 	mongodbContainer, err := tc.Run(ctx, image)

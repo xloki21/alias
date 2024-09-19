@@ -1,6 +1,3 @@
-//go:build e2e
-// +build e2e
-
 package e2e
 
 import (
@@ -11,10 +8,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/xloki21/alias/internal/app"
-	"github.com/xloki21/alias/internal/controller/rest"
-	"github.com/xloki21/alias/internal/controller/rest/mw"
+	"github.com/xloki21/alias/internal/app/config"
+	"github.com/xloki21/alias/internal/repository"
 	"github.com/xloki21/alias/internal/tests"
-	"go.uber.org/zap"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -24,49 +20,51 @@ import (
 	"time"
 )
 
+var testCfg = config.AppConfig{
+	Service: config.Service{HTTP: "localhost:8080",
+		GRPC:        "localhost:8081",
+		GRPCGateway: "localhost:8082",
+	},
+	Storage: config.StorageConfig{
+		Type: repository.MongoDB,
+		MongoDB: &config.MongoDBStorageConfig{
+			Database: "aliases",
+		},
+	},
+	LoggerConfig: config.LoggerConfig{
+		Level:    "info",
+		Encoding: "console",
+	},
+}
+
 const (
 	testAppHttpServiceAddress = "localhost:8080"
-	baseUrlPrefix             = "http://" + testAppHttpServiceAddress
 	testApiV1                 = "/api/v1"
 	testEndpointAlias         = testApiV1 + "/alias"
-	testEndpointHealthcheck   = testApiV1 + "/healthcheck"
-	testEndpointRedirect      = ""
 )
 
 func TestApi_e2e(t *testing.T) {
 	ctx := context.Background()
 
-	container, db := tests.SetupMongoDBContainer(t, nil)
+	container, _ := tests.SetupMongoDBContainer(t, nil)
 	defer func(container testcontainers.Container, ctx context.Context) {
 		err := container.Terminate(ctx)
 		require.NoError(t, err)
 	}(container, ctx)
 
-	service := tests.NewTestAliasService(ctx, db)
-	ctrl := rest.NewController(service, baseUrlPrefix)
+	connstr, err := container.ConnectionString(ctx)
+	assert.NoError(t, err)
 
-	mux := http.NewServeMux()
-	mux.HandleFunc(testEndpointAlias, mw.Use(ctrl.CreateAlias, mw.RequestThrottler, mw.Logging, mw.PanicRecovery))
-	mux.HandleFunc(testEndpointHealthcheck, mw.Use(ctrl.Healthcheck, mw.RequestThrottler, mw.Logging, mw.PanicRecovery))
-	mux.HandleFunc(testEndpointAlias+"/{key}", mw.Use(ctrl.RemoveAlias, mw.RequestThrottler, mw.Logging, mw.PanicRecovery))
-	mux.HandleFunc(testEndpointRedirect+"/{key}", mw.Use(ctrl.Redirect, mw.RequestThrottler, mw.Logging, mw.PanicRecovery))
+	testCfg.Storage.MongoDB.URI = connstr
 
-	application := &app.Application{
-		HttpServer: &http.Server{
-			Addr:    testAppHttpServiceAddress,
-			Handler: mux,
-		},
-	}
+	application, err := app.New(testCfg)
+	assert.NoError(t, err)
 
-	go func() {
-		if err := application.Run(ctx); err != nil {
-			zap.S().Fatal("failed to start application", zap.Error(err))
-		}
-	}()
+	go application.Run(ctx)
 
 	client := &http.Client{Timeout: 10 * time.Second}
 
-	endpointAliasTarget := fmt.Sprintf("http://%s%s", testAppHttpServiceAddress, testEndpointAlias)
+	endpointAliasTarget := fmt.Sprintf("http://%s%s", testCfg.Service.HTTP, testEndpointAlias)
 
 	t.Run("Create aliases should be ok", func(t *testing.T) {
 		resp, err := client.Post(endpointAliasTarget,

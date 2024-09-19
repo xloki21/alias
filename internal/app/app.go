@@ -51,9 +51,10 @@ const (
 )
 
 type Application struct {
-	HttpServer   *http.Server
-	GrpcServer   *grpc.Server
-	grpcListener net.Listener
+	HTTPServer        *http.Server
+	GRPCGatewayServer *http.Server
+	GRPCServer        *grpc.Server
+	grpcListener      net.Listener
 }
 
 func New(cfg config.AppConfig) (*Application, error) {
@@ -70,15 +71,22 @@ func New(cfg config.AppConfig) (*Application, error) {
 	switch cfg.Storage.Type {
 	case repository.MongoDB:
 
-		credential := options.Credential{
-			AuthSource: cfg.Storage.MongoDB.Credentials.AuthSource,
-			Username:   cfg.Storage.MongoDB.Credentials.User,
-			Password:   cfg.Storage.MongoDB.Credentials.Password,
-		}
 		clientOptions := options.Client().
 			ApplyURI(cfg.Storage.MongoDB.URI).
-			SetAuth(credential).
 			SetServerSelectionTimeout(mongoDBServerSelectionTimeout)
+
+		if cfg.Storage.MongoDB.Credentials.AuthSource != "" {
+			credential := options.Credential{
+				AuthSource: cfg.Storage.MongoDB.Credentials.AuthSource,
+				Username:   cfg.Storage.MongoDB.Credentials.User,
+				Password:   cfg.Storage.MongoDB.Credentials.Password,
+			}
+			clientOptions.SetAuth(credential)
+		}
+
+		//clientOptions := options.Client().
+		//	ApplyURI(cfg.Storage.MongoDB.URI).
+		//	SetServerSelectionTimeout(mongoDBServerSelectionTimeout).SetAuth(credential)
 
 		client, err := mongo.Connect(ctx, clientOptions)
 
@@ -140,19 +148,23 @@ func New(cfg config.AppConfig) (*Application, error) {
 	gwmux := runtime.NewServeMux()
 	opts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
 
-	if err := aliasapi.RegisterAliasAPIHandlerFromEndpoint(ctx, gwmux, cfg.Service.GRPC, opts); err != nil {
+	if err := aliasapi.RegisterAliasAPIHandlerFromEndpoint(ctx, gwmux, cfg.Service.GRPCGateway, opts); err != nil {
 		zap.S().Fatalw("core", zap.String("application error", err.Error()))
 		return nil, err
 	}
 
 	app := &Application{
-		HttpServer: &http.Server{
+		HTTPServer: &http.Server{
 			Addr:         cfg.Service.HTTP,
 			ReadTimeout:  httpServerReadTimeout,
 			WriteTimeout: httpServerWriteTimeout,
 			Handler:      http.DefaultServeMux,
 		},
-		GrpcServer:   grpcServer,
+		GRPCServer: grpcServer,
+		GRPCGatewayServer: &http.Server{
+			Addr:    cfg.Service.GRPCGateway,
+			Handler: gwmux,
+		},
 		grpcListener: listener,
 	}
 	ctrlHTTP := rest.NewController(aliasService, baseURLPrefix)
@@ -167,8 +179,17 @@ func (a *Application) Run(ctx context.Context) error {
 
 	errChan := make(chan error)
 	go func() {
-		zap.S().Infow("HTTP", zap.String("stage", fmt.Sprintf("start server, listening on %s", a.HttpServer.Addr)))
-		if err := a.HttpServer.ListenAndServe(); err != nil {
+		zap.S().Infow("HTTP", zap.String("stage", fmt.Sprintf("start server, listening on %s", a.HTTPServer.Addr)))
+		if err := a.HTTPServer.ListenAndServe(); err != nil {
+			if !errors.Is(err, http.ErrServerClosed) {
+				errChan <- err
+			}
+		}
+	}()
+
+	go func() {
+		zap.S().Infow("gRPC-gw", zap.String("stage", fmt.Sprintf("start server, listening on %s", a.GRPCGatewayServer.Addr)))
+		if err := a.GRPCGatewayServer.ListenAndServe(); err != nil {
 			if !errors.Is(err, http.ErrServerClosed) {
 				errChan <- err
 			}
@@ -177,15 +198,32 @@ func (a *Application) Run(ctx context.Context) error {
 
 	go func() {
 		zap.S().Infow("gRPC", zap.String("stage", fmt.Sprintf("start server, listening on %s", a.grpcListener.Addr())))
-		if err := a.GrpcServer.Serve(a.grpcListener); err != nil {
+		if err := a.GRPCServer.Serve(a.grpcListener); err != nil {
 			zap.S().Fatalw("core", zap.String("application error", err.Error()))
 		}
 	}()
 
 	select {
 	case <-ctx.Done():
-		zap.S().Info("application graceful shutdown")
-		return a.HttpServer.Shutdown(ctx)
+		zap.S().Infow("core", zap.String("stage", "application graceful shutdown begins"))
+		zap.S().Infow("core", zap.String("stage", "shutting down http server"))
+		err := a.HTTPServer.Shutdown(ctx)
+		if err != nil {
+			return err
+		}
+		zap.S().Infow("core", zap.String("stage", "HTTP server stopped"))
+		zap.S().Infow("core", zap.String("stage", "shutting down gRPC-gateway server"))
+
+		err = a.GRPCGatewayServer.Shutdown(ctx)
+		if err != nil {
+			return err
+		}
+		zap.S().Infow("core", zap.String("stage", "gRPC-gateway server stopped"))
+
+		zap.S().Infow("core", zap.String("stage", "shutting down gRPC-server"))
+		a.GRPCServer.GracefulStop()
+		zap.S().Infow("core", zap.String("stage", "gRPC-server stopped"))
+		return nil
 	case err := <-errChan:
 		zap.S().Fatalw("core", zap.String("application error", err.Error()))
 		return err
@@ -199,5 +237,5 @@ func (a *Application) initializeRoutes(ctrl *rest.Controller) {
 	mux.HandleFunc(endpointHealthcheck, mw.Use(ctrl.Healthcheck, mw.RequestThrottler, mw.Logging, mw.PanicRecovery))
 	mux.HandleFunc(endpointAlias+"/{key}", mw.Use(ctrl.RemoveAlias, mw.RequestThrottler, mw.Logging, mw.PanicRecovery))
 	mux.HandleFunc(endpointRedirect+"/{key}", mw.Use(ctrl.Redirect, mw.RequestThrottler, mw.Logging, mw.PanicRecovery))
-	a.HttpServer.Handler = mux
+	a.HTTPServer.Handler = mux
 }

@@ -14,8 +14,9 @@ import (
 )
 
 type Service struct {
-	HTTP string `mapstructure:"http"`
-	GRPC string `mapstructure:"grpc"`
+	HTTP        string `mapstructure:"http"`
+	GRPC        string `mapstructure:"grpc"`
+	GRPCGateway string `mapstructure:"grpc-gateway"`
 }
 
 type LoggerConfig struct {
@@ -78,6 +79,7 @@ func MustLoad() (AppConfig, error) {
 		if errors.As(err, &configFileNotFoundError) {
 			viper.SetDefault("service.http", "localhost:8080")
 			viper.SetDefault("service.grpc", "localhost:8081")
+			viper.SetDefault("service.grpc-gateway", "localhost:8082")
 			viper.SetDefault("storage.type", repository.InMemory)
 			viper.SetDefault("logger.level", "info")
 			viper.SetDefault("logger.encoding", "json")

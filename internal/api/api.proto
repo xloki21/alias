@@ -10,12 +10,14 @@ service AliasAPI {
   rpc Create(CreateRequest) returns (CreateResponse) {
     option (google.api.http) = {
       post: "/api/v1/alias"
-      body: "urls"
+      body: "*"
     };
   };
 
   rpc HealthCheck(google.protobuf.Empty) returns (google.protobuf.Empty) {
-
+    option (google.api.http) = {
+      get: "/api/v1/healthcheck"
+    };
   };
 
   rpc Remove(KeyRequest) returns (google.protobuf.Empty){
