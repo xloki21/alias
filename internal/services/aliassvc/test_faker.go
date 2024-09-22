@@ -47,5 +47,10 @@ func TestAlias(t *testing.T, isPermanent bool) domain.Alias {
 		IsActive: true,
 		Params:   domain.TTLParams{TriesLeft: triesLeft, IsPermanent: isPermanent},
 	}
+}
 
+func TestExpiredAlias(t *testing.T) domain.Alias {
+	alias := TestAlias(t, false)
+	alias.Params.TriesLeft = 0
+	return alias
 }

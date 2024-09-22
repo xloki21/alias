@@ -50,7 +50,7 @@ func TestAlias_Create_MongoDB(t *testing.T) {
 	}
 }
 
-func TestAlias_FindByKey_MongoDB(t *testing.T) {
+func TestAlias_FindOriginalURL_MongoDB(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
@@ -72,39 +72,90 @@ func TestAlias_FindByKey_MongoDB(t *testing.T) {
 		key string
 	}
 
-	testCases := []struct {
-		name        string
-		args        args
-		wants       *domain.Alias
-		expectedErr error
+	tests := []struct {
+		name      string
+		args      args
+		wants     *domain.Alias
+		expectErr error
 	}{
 		{
-			name: "alias is not found",
-			args: args{
-				ctx: context.Background(),
-				key: "non-existent-key",
-			},
-			wants:       nil,
-			expectedErr: domain.ErrAliasNotFound,
+			name:      "original url found successfully",
+			args:      args{ctx: context.Background(), key: testData[0].Key},
+			wants:     &testData[0],
+			expectErr: nil,
 		},
 		{
-			name: "alias is found",
-			args: args{
-				ctx: context.Background(),
-				key: testData[0].Key,
-			},
-			wants:       &testData[0],
-			expectedErr: nil,
+			name:      "original url not found",
+			args:      args{ctx: context.Background(), key: "lookup-key"},
+			wants:     nil,
+			expectErr: domain.ErrAliasNotFound,
 		},
 	}
 
-	for _, testCase := range testCases {
+	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
-			got, err := aliasService.FindByKey(ctx, testCase.args.key)
-			assert.ErrorIs(t, err, testCase.expectedErr)
+			got, err := aliasService.FindOriginalURL(ctx, testCase.args.key)
+			assert.ErrorIs(t, err, testCase.expectErr)
 			if testCase.wants != nil {
 				assert.Equal(t, testCase.wants.URL, got.URL)
 			}
+		})
+	}
+}
+
+func TestAlias_Use_MongoDB(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	testData := []domain.Alias{
+		aliassvc.TestAlias(t, false),
+		aliassvc.TestAlias(t, true),
+		aliassvc.TestExpiredAlias(t),
+	}
+	testData[2].Params.TriesLeft = 0
+
+	container, db := tests.SetupMongoDBContainer(t, testData)
+	defer func(container testcontainers.Container, ctx context.Context) {
+		err := container.Terminate(ctx)
+		require.NoError(t, err)
+	}(container, ctx)
+
+	aliasService := tests.NewTestAliasService(ctx, db)
+
+	type args struct {
+		ctx   context.Context
+		alias *domain.Alias
+	}
+	tests := []struct {
+		name      string
+		args      args
+		wants     *domain.Alias
+		expectErr error
+	}{
+		{
+			name:      "use expired alias",
+			args:      args{ctx: context.Background(), alias: &testData[2]},
+			wants:     nil,
+			expectErr: domain.ErrAliasExpired,
+		},
+		{
+			name:  "use valid alias with ttl successfully",
+			args:  args{ctx: context.Background(), alias: &testData[0]},
+			wants: &testData[0],
+		},
+		{
+			name:  "use valid permanent alias",
+			args:  args{ctx: context.Background(), alias: &testData[1]},
+			wants: &testData[1],
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := aliasService.Use(testCase.args.ctx, testCase.args.alias)
+			assert.Equal(t, testCase.wants, got)
+			assert.ErrorIs(t, err, testCase.expectErr)
 		})
 	}
 }

@@ -21,7 +21,8 @@ import (
 )
 
 var testCfg = config.AppConfig{
-	Service: config.Service{HTTP: "localhost:8080",
+	Service: config.Service{
+		HTTP:        "localhost:8080",
 		GRPC:        "localhost:8081",
 		GRPCGateway: "localhost:8082",
 	},

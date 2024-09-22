@@ -84,10 +84,6 @@ func New(cfg config.AppConfig) (*Application, error) {
 			clientOptions.SetAuth(credential)
 		}
 
-		//clientOptions := options.Client().
-		//	ApplyURI(cfg.Storage.MongoDB.URI).
-		//	SetServerSelectionTimeout(mongoDBServerSelectionTimeout).SetAuth(credential)
-
 		client, err := mongo.Connect(ctx, clientOptions)
 
 		if err != nil {
