@@ -49,7 +49,7 @@ services:
       - 8081:8081
     command:
       - --address=alias:8081
-      - --message="let me look for ya with http://www.ya.ru or http://www.google.com."
+      - --message=let me look for ya with http://www.ya.ru or http://www.google.com.
     networks:
       - aliasnet
 

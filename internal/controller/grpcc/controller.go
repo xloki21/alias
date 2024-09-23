@@ -94,6 +94,12 @@ func (c *Controller) ProcessMessage(ctx context.Context, data *aliasapi.ProcessM
 		Urls:          urls,
 		MaxUsageCount: nil,
 	}
+
+	if len(request.Urls) == 0 {
+		// message without urls
+		return &aliasapi.ProcessMessageResponse{Message: data.Message}, nil
+	}
+
 	response, err := c.Create(ctx, request)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
