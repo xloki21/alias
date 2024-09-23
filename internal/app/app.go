@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
-	"github.com/xloki21/alias/internal/app/config"
+	"github.com/xloki21/alias/internal/config"
 	"github.com/xloki21/alias/internal/controller/grpcc"
 	"github.com/xloki21/alias/internal/controller/grpcc/interceptors"
 	"github.com/xloki21/alias/internal/controller/httpc"

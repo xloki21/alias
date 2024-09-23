@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/xloki21/alias/internal/app"
-	"github.com/xloki21/alias/internal/app/config"
+	"github.com/xloki21/alias/internal/config"
 	"github.com/xloki21/alias/internal/repository"
 	"github.com/xloki21/alias/tests"
 	"io"
@@ -28,6 +28,7 @@ var testCfg = config.AppConfig{
 		HTTP:        "localhost:8080",
 		GRPC:        "localhost:8081",
 		GRPCGateway: "localhost:8082",
+		BaseURL:     "http://localhost:8080",
 	},
 	Storage: config.StorageConfig{
 		Type: repository.MongoDB,
@@ -42,9 +43,8 @@ var testCfg = config.AppConfig{
 }
 
 const (
-	testAppHttpServiceAddress = "localhost:8080"
-	testApiV1                 = "/api/v1"
-	testEndpointAlias         = testApiV1 + "/alias"
+	testApiV1         = "/api/v1"
+	testEndpointAlias = testApiV1 + "/alias"
 )
 
 func TestApi_e2e(t *testing.T) {
@@ -68,7 +68,7 @@ func TestApi_e2e(t *testing.T) {
 
 	client := &http.Client{Timeout: 10 * time.Second}
 
-	endpointAliasTarget := fmt.Sprintf("http://%s%s", testCfg.Service.HTTP, testEndpointAlias)
+	endpointAliasTarget := fmt.Sprintf("%s%s", testCfg.Service.BaseURL, testEndpointAlias)
 
 	t.Run("Create aliases should be ok", func(t *testing.T) {
 		resp, err := client.Post(endpointAliasTarget,
@@ -144,7 +144,7 @@ func TestApi_e2e(t *testing.T) {
 
 	t.Run("Redirect should be ok", func(t *testing.T) {
 		resp, err := client.Post(
-			fmt.Sprintf("http://%s%s", testAppHttpServiceAddress, testEndpointAlias),
+			fmt.Sprintf("%s%s", testCfg.Service.BaseURL, testEndpointAlias),
 			"application/json", strings.NewReader("{\"urls\": [\"http://www.ya.ru\"]}"))
 		assert.NoError(t, err)
 		assert.Equal(t, http.StatusCreated, resp.StatusCode)
@@ -169,7 +169,7 @@ func TestApi_e2e(t *testing.T) {
 	t.Run("Redirect should fail after alias has been expired", func(t *testing.T) {
 		maxUsageCount := 3
 		resp, err := client.Post(
-			fmt.Sprintf("http://%s%s?maxUsageCount=%d", testAppHttpServiceAddress, testEndpointAlias, maxUsageCount),
+			fmt.Sprintf("%s%s?maxUsageCount=%d", testCfg.Service.BaseURL, testEndpointAlias, maxUsageCount),
 			"application/json", strings.NewReader("{\"urls\": [\"http://www.ya.ru\"]}"))
 		assert.NoError(t, err)
 		assert.Equal(t, http.StatusCreated, resp.StatusCode)
