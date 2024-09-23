@@ -1,13 +1,15 @@
-[{
-  "createIndexes": "aliases",
-  "indexes": [
-    {
-      "key": {
-        "alias": 1
-      },
-      "name": "unique_alias",
-      "unique": true,
-      "background": true
-    }
-  ]
-}]
+[
+  {
+    "createIndexes": "aliases",
+    "indexes": [
+      {
+        "key": {
+          "key": 1
+        },
+        "name": "unique_key",
+        "unique": true,
+        "background": true
+      }
+    ]
+  }
+]

@@ -6,6 +6,7 @@ option go_package = "pbuf/alias";
 import "google/api/annotations.proto";
 import "google/protobuf/empty.proto";
 
+
 service AliasAPI {
   rpc Create(CreateRequest) returns (CreateResponse) {
     option (google.api.http) = {
@@ -25,11 +26,27 @@ service AliasAPI {
       delete: "/api/v1/alias/{key}"
     };
   };
-  rpc Find(KeyRequest) returns (FindResponse) {
+  rpc FindOriginalURL(KeyRequest) returns (FindResponse) {
     option (google.api.http) = {
       get: "/api/v1/alias/{key}"
     };
   };
+
+  rpc ProcessMessage(ProcessMessageRequest) returns (ProcessMessageResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/process"
+      body: "*"
+    };
+  };
+
+}
+
+message ProcessMessageRequest{
+  string message = 1;
+}
+
+message ProcessMessageResponse {
+  string message = 1;
 }
 
 message CreateRequest {

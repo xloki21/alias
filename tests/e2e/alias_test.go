@@ -1,3 +1,6 @@
+//go:build e2e
+// +build e2e
+
 package e2e
 
 import (
@@ -10,7 +13,7 @@ import (
 	"github.com/xloki21/alias/internal/app"
 	"github.com/xloki21/alias/internal/app/config"
 	"github.com/xloki21/alias/internal/repository"
-	"github.com/xloki21/alias/internal/tests"
+	"github.com/xloki21/alias/tests"
 	"io"
 	"net/http"
 	"net/http/httptest"

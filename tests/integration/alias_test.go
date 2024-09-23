@@ -10,7 +10,7 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/xloki21/alias/internal/domain"
 	"github.com/xloki21/alias/internal/services/aliassvc"
-	"github.com/xloki21/alias/internal/tests"
+	"github.com/xloki21/alias/tests"
 	"testing"
 )
 

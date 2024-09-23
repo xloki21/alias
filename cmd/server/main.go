@@ -24,6 +24,7 @@ func main() {
 	if err != nil {
 		log.Fatal("failed to init application config: " + err.Error())
 	}
+	zap.S().Infow("core", zap.String("state", "application config loaded"))
 
 	application, err := app.New(cfg)
 	if err != nil {

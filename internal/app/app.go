@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/xloki21/alias/internal/app/config"
-	grpc2 "github.com/xloki21/alias/internal/controller/grpc"
-	"github.com/xloki21/alias/internal/controller/grpc/interceptors"
-	"github.com/xloki21/alias/internal/controller/rest"
-	"github.com/xloki21/alias/internal/controller/rest/mw"
+	"github.com/xloki21/alias/internal/controller/grpcc"
+	"github.com/xloki21/alias/internal/controller/grpcc/interceptors"
+	"github.com/xloki21/alias/internal/controller/httpc"
+	"github.com/xloki21/alias/internal/controller/httpc/mw"
 	"github.com/xloki21/alias/internal/domain"
 	aliasapi "github.com/xloki21/alias/internal/gen/go/pbuf/alias"
 	"github.com/xloki21/alias/internal/infrastructure/squeue"
@@ -61,10 +61,12 @@ func New(cfg config.AppConfig) (*Application, error) {
 	ctx := context.Background()
 	baseURLPrefix := fmt.Sprintf("http://%s%s", cfg.Service.HTTP, endpointRedirect)
 
-	var aliasService *aliassvc.Alias
-
 	aliasUsedQ := squeue.New()
 	aliasExpiredQ := squeue.New()
+
+	var managerService *managersvc.Manager
+	var statsService *statssvc.Statistics
+	var aliasService *aliassvc.Alias
 
 	keyGen := keygen.NewURLSafeRandomStringGenerator()
 
@@ -105,35 +107,29 @@ func New(cfg config.AppConfig) (*Application, error) {
 
 		aliasRepo := mongodb.NewAliasRepository(db.Collection(mongodb.AliasCollectionName))
 		statsRepo := mongodb.NewStatisticsRepository(db.Collection(mongodb.StatsCollectionName))
-		managerSvc := managersvc.NewManager(aliasRepo, aliasUsedQ)
-		managerSvc.Process(ctx)
-
-		statsSvc := statssvc.NewStatistics(statsRepo, aliasExpiredQ)
-		statsSvc.Process(ctx)
-
+		managerService = managersvc.NewManager(aliasRepo, aliasUsedQ)
+		statsService = statssvc.NewStatistics(statsRepo, aliasExpiredQ)
 		aliasService = aliassvc.NewAlias(aliasExpiredQ, aliasUsedQ, aliasRepo, keyGen)
 
 	case repository.InMemory:
-		zap.S().Info("using in-memory storage type")
 		aliasRepo := inmemory.NewAliasRepository()
 		statsRepo := inmemory.NewStatisticsRepository()
-
-		managerSvc := managersvc.NewManager(aliasRepo, aliasUsedQ)
-		managerSvc.Process(ctx)
-
-		statsSvc := statssvc.NewStatistics(statsRepo, aliasExpiredQ)
-		statsSvc.Process(ctx)
-
+		managerService = managersvc.NewManager(aliasRepo, aliasUsedQ)
+		statsService = statssvc.NewStatistics(statsRepo, aliasExpiredQ)
 		aliasService = aliassvc.NewAlias(aliasExpiredQ, aliasUsedQ, aliasRepo, keyGen)
 
 	default:
 		zap.S().Fatalf("unknown storage type: %s", cfg.Storage.Type)
 		return nil, domain.ErrUnknownStorageType
 	}
+	managerService.Process(ctx)
+	statsService.Process(ctx)
+
+	zap.S().Infow("core", zap.String("state", "selected storage type"), zap.String("type", string(cfg.Storage.Type)))
 
 	grpcServer := grpc.NewServer(grpc.UnaryInterceptor(interceptors.LoggingInterceptor))
 	reflection.Register(grpcServer)
-	aliasapi.RegisterAliasAPIServer(grpcServer, grpc2.NewController(aliasService, baseURLPrefix))
+	aliasapi.RegisterAliasAPIServer(grpcServer, grpcc.NewController(aliasService, baseURLPrefix))
 
 	listener, err := net.Listen("tcp", cfg.Service.GRPC)
 	if err != nil {
@@ -144,7 +140,7 @@ func New(cfg config.AppConfig) (*Application, error) {
 	gwmux := runtime.NewServeMux()
 	opts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
 
-	if err := aliasapi.RegisterAliasAPIHandlerFromEndpoint(ctx, gwmux, cfg.Service.GRPCGateway, opts); err != nil {
+	if err := aliasapi.RegisterAliasAPIHandlerFromEndpoint(ctx, gwmux, cfg.Service.GRPC, opts); err != nil {
 		zap.S().Fatalw("core", zap.String("application error", err.Error()))
 		return nil, err
 	}
@@ -163,7 +159,7 @@ func New(cfg config.AppConfig) (*Application, error) {
 		},
 		grpcListener: listener,
 	}
-	ctrlHTTP := rest.NewController(aliasService, baseURLPrefix)
+	ctrlHTTP := httpc.NewController(aliasService, baseURLPrefix)
 	app.initializeRoutes(ctrlHTTP)
 
 	return app, nil
@@ -175,7 +171,7 @@ func (a *Application) Run(ctx context.Context) error {
 
 	errChan := make(chan error)
 	go func() {
-		zap.S().Infow("HTTP", zap.String("stage", fmt.Sprintf("start server, listening on %s", a.HTTPServer.Addr)))
+		zap.S().Infow("HTTP", zap.String("state", fmt.Sprintf("start server, listening on %s", a.HTTPServer.Addr)))
 		if err := a.HTTPServer.ListenAndServe(); err != nil {
 			if !errors.Is(err, http.ErrServerClosed) {
 				errChan <- err
@@ -184,7 +180,7 @@ func (a *Application) Run(ctx context.Context) error {
 	}()
 
 	go func() {
-		zap.S().Infow("gRPC-gw", zap.String("stage", fmt.Sprintf("start server, listening on %s", a.GRPCGatewayServer.Addr)))
+		zap.S().Infow("gRPC-gw", zap.String("state", fmt.Sprintf("start server, listening on %s", a.GRPCGatewayServer.Addr)))
 		if err := a.GRPCGatewayServer.ListenAndServe(); err != nil {
 			if !errors.Is(err, http.ErrServerClosed) {
 				errChan <- err
@@ -193,7 +189,7 @@ func (a *Application) Run(ctx context.Context) error {
 	}()
 
 	go func() {
-		zap.S().Infow("gRPC", zap.String("stage", fmt.Sprintf("start server, listening on %s", a.grpcListener.Addr())))
+		zap.S().Infow("gRPC", zap.String("state", fmt.Sprintf("start server, listening on %s", a.grpcListener.Addr())))
 		if err := a.GRPCServer.Serve(a.grpcListener); err != nil {
 			zap.S().Fatalw("core", zap.String("application error", err.Error()))
 		}
@@ -201,24 +197,24 @@ func (a *Application) Run(ctx context.Context) error {
 
 	select {
 	case <-ctx.Done():
-		zap.S().Infow("core", zap.String("stage", "application graceful shutdown begins"))
-		zap.S().Infow("core", zap.String("stage", "shutting down http server"))
+		zap.S().Infow("core", zap.String("state", "application graceful shutdown begins"))
+		zap.S().Infow("core", zap.String("state", "shutting down http server"))
 		err := a.HTTPServer.Shutdown(ctx)
 		if err != nil {
 			return err
 		}
-		zap.S().Infow("core", zap.String("stage", "HTTP server stopped"))
-		zap.S().Infow("core", zap.String("stage", "shutting down gRPC-gateway server"))
+		zap.S().Infow("core", zap.String("state", "HTTP server stopped"))
+		zap.S().Infow("core", zap.String("state", "shutting down gRPC-gateway server"))
 
 		err = a.GRPCGatewayServer.Shutdown(ctx)
 		if err != nil {
 			return err
 		}
-		zap.S().Infow("core", zap.String("stage", "gRPC-gateway server stopped"))
+		zap.S().Infow("core", zap.String("state", "gRPC-gateway server stopped"))
 
-		zap.S().Infow("core", zap.String("stage", "shutting down gRPC-server"))
+		zap.S().Infow("core", zap.String("state", "shutting down gRPC-server"))
 		a.GRPCServer.GracefulStop()
-		zap.S().Infow("core", zap.String("stage", "gRPC-server stopped"))
+		zap.S().Infow("core", zap.String("state", "gRPC-server stopped"))
 		return nil
 	case err := <-errChan:
 		zap.S().Fatalw("core", zap.String("application error", err.Error()))
@@ -226,8 +222,8 @@ func (a *Application) Run(ctx context.Context) error {
 	}
 }
 
-func (a *Application) initializeRoutes(ctrl *rest.Controller) {
-	zap.S().Infow("HTTP", zap.String("stage", "initialize routes"))
+func (a *Application) initializeRoutes(ctrl *httpc.Controller) {
+	zap.S().Infow("core", zap.String("state", "initialize http-routes"))
 	mux := http.NewServeMux()
 	mux.HandleFunc(endpointAlias, mw.Use(ctrl.CreateAlias, mw.RequestThrottler, mw.Logging, mw.PanicRecovery))
 	mux.HandleFunc(endpointHealthcheck, mw.Use(ctrl.Healthcheck, mw.RequestThrottler, mw.Logging, mw.PanicRecovery))

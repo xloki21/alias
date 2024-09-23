@@ -187,57 +187,6 @@ func (s *Alias) Use(ctx context.Context, alias *domain.Alias) (*domain.Alias, er
 	return alias, nil
 }
 
-// FindByKey finds the alias link
-func (s *Alias) FindByKey(ctx context.Context, key string) (*domain.Alias, error) {
-	fn := "FindByKey"
-	zap.S().Infow("service",
-		zap.String("name", s.Name()),
-		zap.String("fn", fn),
-		zap.String("key", key))
-	alias, err := s.repo.Find(ctx, key)
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", fn, err)
-	}
-
-	if alias.Params.IsPermanent {
-		return alias, nil
-	}
-
-	// check if alias is expired and send event with publisher
-	if alias.Params.TriesLeft == 0 {
-		event := alias.Expired()
-
-		s.expiredQ.Produce(event)
-
-		zap.S().Infow("service",
-			zap.String("name", s.Name()),
-			zap.String("fn", fn),
-			zap.String("published", event.String()),
-		)
-		return nil, domain.ErrAliasExpired
-	}
-
-	zap.S().Infow("service",
-		zap.String("name", s.Name()),
-		zap.String("fn", fn),
-		zap.String("alias", alias.Type()),
-		zap.String("key", alias.Key),
-		zap.Int("tries left", alias.Params.TriesLeft))
-
-	// publish event
-	event := alias.Redirected()
-
-	s.usedQ.Produce(event)
-
-	zap.S().Infow("service",
-		zap.String("name", s.Name()),
-		zap.String("fn", fn),
-		zap.String("publish", event.String()),
-	)
-
-	return alias, nil
-}
-
 // Remove removes the alias link
 func (s *Alias) Remove(ctx context.Context, key string) error {
 	fn := "Remove"

@@ -5,9 +5,15 @@ tasks:
     cmd: go generate ./...
     desc: "Generate mocks using mockery"
 
-  build:
-    cmd: go build -o aliassrv -v ./cmd/main.go
-    desc: "Build app"
+  build-server-app:
+    cmd: go build -o alias-server -v ./cmd/server/main.go
+    desc: "Build server app"
+
+  build-client-app:
+    cmd: go build -o alias-client -v ./cmd/client/main.go
+    desc: "Build client app"
+
+
 
   coverage:
     cmds:
@@ -22,14 +28,22 @@ tasks:
       - task: coverage
     desc: "Generate mocks, run tests, and calculate coverage"
 
+  test:
+    deps: [ generate-mocks ]
+    cmds:
+      - task: mock-test
+      - task: integration-test
+      - task: e2e-test
+    desc: "Run all tests"
+
   docker:
-    cmd: docker build . -t alias:v1.0.0beta
+    cmd: docker build . -t alias:1.0.0
     desc: "Build docker image"
 
   integration-test:
     cmds:
       - go clean -testcache
-      - go test -tags=integration -v ./internal/tests/...
+      - go test -tags=integration -v ./tests/...
     desc: "Run integration tests"
 
   mock-test:
@@ -40,7 +54,7 @@ tasks:
 
   e2e-test:
     cmds:
-      - go test -tags=e2e -v ./internal/tests/...
+      - go test -tags=e2e -v ./tests/...
     desc: "Run e2e tests"
 
   grpc-ensure-protoc:
@@ -57,6 +71,7 @@ tasks:
           echo "protoc is already installed"
         fi
       - protoc --version
+    desc: "Ensure protoc is installed"
 
   grpc-ensure-plugins:
     cmds:
@@ -84,6 +99,7 @@ tasks:
         else
           echo "protoc-gen-grpc-gateway is already installed"
         fi
+    desc: "Ensure plugins are installed"
 
   grpc-download-vendor-protos:
     cmds:
@@ -119,8 +135,10 @@ tasks:
     deps:
       - grpc-ensure-protoc
       - grpc-ensure-plugins
+    desc: "Generate gRPC and gRPC-Gateway code"
 
   clean:
     cmds:
       - echo "Cleaning generated files..."
-      - rm -rf gen/go vendor-proto
+      - rm -rf internal/gen/go internal/gen/swagger vendor-proto internal/services/aliassvc/mocks
+    desc: "Clean generated files"

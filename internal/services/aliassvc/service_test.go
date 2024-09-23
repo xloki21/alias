@@ -151,7 +151,7 @@ func TestAlias_FindOriginalURL(t *testing.T) {
 			t.Parallel()
 			th := NewTestHelper(t)
 			wants := tt.mockFunc(th, tt.args)
-			got, err := th.service.FindByKey(tt.args.ctx, tt.args.key)
+			got, err := th.service.FindOriginalURL(tt.args.ctx, tt.args.key)
 			assert.Equal(t, wants, got)
 			assert.ErrorIs(t, err, tt.expectErr)
 		})
@@ -161,9 +161,16 @@ func TestAlias_FindOriginalURL(t *testing.T) {
 
 func TestAlias_Use(t *testing.T) {
 	t.Parallel()
+
+	testData := []domain.Alias{
+		TestExpiredAlias(t),
+		TestAlias(t, false),
+		TestAlias(t, true),
+	}
+
 	type args struct {
-		ctx context.Context
-		key string
+		ctx   context.Context
+		alias *domain.Alias
 	}
 	tests := []struct {
 		name      string
@@ -173,17 +180,8 @@ func TestAlias_Use(t *testing.T) {
 	}{
 		{
 			name: "use expired alias",
-			args: args{ctx: context.Background(), key: "lookup-key"},
+			args: args{ctx: context.Background(), alias: &testData[0]},
 			mockFunc: func(th *TestHelper, args args) *domain.Alias {
-				alias := &domain.Alias{
-					ID:       "unique-id",
-					Key:      args.key,
-					URL:      &url.URL{Scheme: "http", Host: "www.host.test", Path: "/path"},
-					IsActive: true,
-					Params:   domain.TTLParams{TriesLeft: 0},
-				}
-
-				th.repo.On("Find", args.ctx, args.key).Return(alias, nil)
 				th.expiredQ.On("Produce", mock.AnythingOfType("AliasExpired"))
 				return nil
 			},
@@ -191,35 +189,17 @@ func TestAlias_Use(t *testing.T) {
 		},
 		{
 			name: "use valid alias with ttl successfully",
-			args: args{ctx: context.Background(), key: "lookup-key"},
+			args: args{ctx: context.Background(), alias: &testData[1]},
 			mockFunc: func(th *TestHelper, args args) *domain.Alias {
-				alias := &domain.Alias{
-					ID:       "unique-id",
-					Key:      args.key,
-					URL:      &url.URL{Scheme: "http", Host: "www.host.test", Path: "/path"},
-					IsActive: true,
-					Params:   domain.TTLParams{TriesLeft: 3, IsPermanent: false},
-				}
-
-				th.repo.On("Find", args.ctx, args.key).Return(alias, nil)
 				th.usedQ.On("Produce", mock.AnythingOfType("AliasUsed"))
-				return alias
+				return args.alias
 			},
 		},
 		{
 			name: "use valid permanent alias",
-			args: args{ctx: context.Background(), key: "lookup-key"},
+			args: args{ctx: context.Background(), alias: &testData[2]},
 			mockFunc: func(th *TestHelper, args args) *domain.Alias {
-				alias := &domain.Alias{
-					ID:       "unique-id",
-					Key:      args.key,
-					URL:      &url.URL{Scheme: "http", Host: "www.host.test", Path: "/path"},
-					IsActive: true,
-					Params:   domain.TTLParams{IsPermanent: true},
-				}
-
-				th.repo.On("Find", args.ctx, args.key).Return(alias, nil)
-				return alias
+				return args.alias
 			},
 		},
 	}
@@ -229,7 +209,7 @@ func TestAlias_Use(t *testing.T) {
 			t.Parallel()
 			th := NewTestHelper(t)
 			wants := tt.mockFunc(th, tt.args)
-			got, err := th.service.FindByKey(tt.args.ctx, tt.args.key)
+			got, err := th.service.Use(tt.args.ctx, tt.args.alias)
 			assert.Equal(t, wants, got)
 			assert.ErrorIs(t, err, tt.expectErr)
 		})

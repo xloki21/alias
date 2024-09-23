@@ -3,13 +3,10 @@ COPY . /src
 WORKDIR /src
 
 RUN go mod download
-RUN go build -o /bin/alias-server /src/cmd/server/main.go
 RUN go build -o /bin/alias-client /src/cmd/client/main.go
 
 FROM scratch
 EXPOSE 8080
 COPY --from=builder /bin/alias-server /bin/alias-server
-COPY --from=builder /bin/alias-client /bin/alias-client
-
 COPY --from=builder /src/config/config.yaml /etc/alias/config.yaml
 CMD ["/bin/alias-server"]

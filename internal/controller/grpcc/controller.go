@@ -1,21 +1,24 @@
-package grpc
+package grpcc
 
 import (
 	"context"
 	"fmt"
 	"github.com/xloki21/alias/internal/domain"
 	aliasapi "github.com/xloki21/alias/internal/gen/go/pbuf/alias"
+	"github.com/xloki21/alias/pkg/urlparser"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"net/url"
+	"strings"
 )
 
 var _ aliasapi.AliasAPIServer = (*Controller)(nil)
 
 type aliasService interface {
 	Create(ctx context.Context, requests []domain.CreateRequest) ([]domain.Alias, error)
-	FindByKey(ctx context.Context, key string) (*domain.Alias, error)
+	FindOriginalURL(ctx context.Context, key string) (*domain.Alias, error)
+	Use(ctx context.Context, alias *domain.Alias) (*domain.Alias, error)
 	Remove(ctx context.Context, key string) error
 }
 
@@ -31,7 +34,6 @@ func NewController(service aliasService, address string) *Controller {
 
 func (c *Controller) Create(ctx context.Context, data *aliasapi.CreateRequest) (*aliasapi.CreateResponse, error) {
 	createRequests := make([]domain.CreateRequest, len(data.Urls))
-
 	isPermanent := data.MaxUsageCount == nil
 	triesLeft := data.GetMaxUsageCount()
 
@@ -71,14 +73,36 @@ func (c *Controller) Remove(ctx context.Context, data *aliasapi.KeyRequest) (*em
 	return nil, nil
 }
 
-func (c *Controller) Find(ctx context.Context, data *aliasapi.KeyRequest) (*aliasapi.FindResponse, error) {
-	alias, err := c.service.FindByKey(ctx, data.Key)
+func (c *Controller) FindOriginalURL(ctx context.Context, data *aliasapi.KeyRequest) (*aliasapi.FindResponse, error) {
+	alias, err := c.service.FindOriginalURL(ctx, data.Key)
 	if err != nil {
 		return nil, status.Error(codes.NotFound, err.Error())
 	}
 	return &aliasapi.FindResponse{Url: fmt.Sprintf("%s/%s", c.address, alias.Key)}, nil
 }
 
-func (c *Controller) HealthCheck(context.Context, *emptypb.Empty) (*emptypb.Empty, error) {
+func (c *Controller) HealthCheck(ctx context.Context, empty *emptypb.Empty) (*emptypb.Empty, error) {
 	return nil, nil
+}
+
+func (c *Controller) ProcessMessage(ctx context.Context, data *aliasapi.ProcessMessageRequest) (*aliasapi.ProcessMessageResponse, error) {
+	urls, err := urlparser.FindURLs(data.Message)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	request := &aliasapi.CreateRequest{
+		Urls:          urls,
+		MaxUsageCount: nil,
+	}
+	response, err := c.Create(ctx, request)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	result := data.Message
+
+	for index, singeUrl := range urls {
+		result = strings.Replace(result, singeUrl, response.Urls[index], 1)
+	}
+
+	return &aliasapi.ProcessMessageResponse{Message: result}, nil
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/xloki21/alias/internal/services/aliassvc"
 	"github.com/xloki21/alias/internal/services/managersvc"
 	"github.com/xloki21/alias/internal/services/statssvc"
+	"github.com/xloki21/alias/migrations"
 	"github.com/xloki21/alias/pkg/keygen"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -45,13 +46,11 @@ func SetupMongoDBContainer(t *testing.T, testData []domain.Alias) (*tc.MongoDBCo
 	db := client.Database(aliasAppDatabase)
 	coll := db.Collection(mongodb.AliasCollectionName)
 
-	indexModel := mongo.IndexModel{
-		Keys:    bson.D{{"key", 1}},
-		Options: options.Index().SetUnique(true),
-	}
-	name, err := coll.Indexes().CreateOne(context.TODO(), indexModel)
+	migrator, err := migrations.CreateMongoDBMigrator(client, aliasAppDatabase)
 	require.NoError(t, err)
-	zap.S().Info("index created", zap.String("name", name))
+
+	err = migrator.Steps(2)
+	require.NoError(t, err)
 
 	if testData != nil {
 		zap.S().Info("filling test data", zap.String("collection", mongodb.AliasCollectionName))

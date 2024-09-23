@@ -1,4 +1,4 @@
-package rest
+package httpc
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/xloki21/alias/internal/domain"
+	"go.uber.org/zap"
 	"io"
 	"net/http"
 	"net/url"
@@ -17,7 +18,6 @@ const maxGoroutines = 10
 
 type aliasService interface {
 	Create(ctx context.Context, requests []domain.CreateRequest) ([]domain.Alias, error)
-	FindByKey(ctx context.Context, key string) (*domain.Alias, error)
 	FindOriginalURL(ctx context.Context, key string) (*domain.Alias, error)
 	Use(ctx context.Context, alias *domain.Alias) (*domain.Alias, error)
 	Remove(ctx context.Context, key string) error
@@ -161,8 +161,10 @@ func (ac *Controller) Redirect(w http.ResponseWriter, r *http.Request) {
 	key := r.PathValue("key")
 
 	alias, err := ac.service.FindOriginalURL(r.Context(), key)
+
 	if err != nil {
 		if errors.Is(err, domain.ErrAliasNotFound) {
+			zap.S().Error("alias not found", zap.String("key", key))
 			http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 		} else {
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
@@ -171,6 +173,7 @@ func (ac *Controller) Redirect(w http.ResponseWriter, r *http.Request) {
 	}
 
 	alias, err = ac.service.Use(r.Context(), alias)
+
 	if err != nil {
 		if errors.Is(err, domain.ErrAliasExpired) {
 			http.Error(w, "url expired", http.StatusGone)
@@ -179,19 +182,6 @@ func (ac *Controller) Redirect(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-
-	//alias, err := ac.service.FindByKey(r.Context(), key)
-	//if err != nil {
-	//	if errors.Is(err, domain.ErrAliasNotFound) {
-	//		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
-	//	} else if errors.Is(err, domain.ErrAliasExpired) {
-	//		http.Error(w, "url expired", http.StatusGone)
-	//	} else {
-	//		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
-	//	}
-	//	return
-	//}
-
 	http.Redirect(w, r, alias.URL.String(), http.StatusTemporaryRedirect)
 }
 
