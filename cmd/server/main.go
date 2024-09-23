@@ -7,7 +7,7 @@ import (
 
 	"github.com/joho/godotenv"
 	"github.com/xloki21/alias/internal/app"
-	"github.com/xloki21/alias/internal/app/config"
+	"github.com/xloki21/alias/internal/config"
 	"go.uber.org/zap"
 )
 
