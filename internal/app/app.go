@@ -59,7 +59,6 @@ type Application struct {
 
 func New(cfg config.AppConfig) (*Application, error) {
 	ctx := context.Background()
-	baseURLPrefix := fmt.Sprintf("http://%s%s", cfg.Service.HTTP, endpointRedirect)
 
 	aliasUsedQ := squeue.New()
 	aliasExpiredQ := squeue.New()
@@ -129,7 +128,7 @@ func New(cfg config.AppConfig) (*Application, error) {
 
 	grpcServer := grpc.NewServer(grpc.UnaryInterceptor(interceptors.LoggingInterceptor))
 	reflection.Register(grpcServer)
-	aliasapi.RegisterAliasAPIServer(grpcServer, grpcc.NewController(aliasService, baseURLPrefix))
+	aliasapi.RegisterAliasAPIServer(grpcServer, grpcc.NewController(aliasService, cfg.Service.BaseURL))
 
 	listener, err := net.Listen("tcp", cfg.Service.GRPC)
 	if err != nil {
@@ -159,7 +158,7 @@ func New(cfg config.AppConfig) (*Application, error) {
 		},
 		grpcListener: listener,
 	}
-	ctrlHTTP := httpc.NewController(aliasService, baseURLPrefix)
+	ctrlHTTP := httpc.NewController(aliasService, cfg.Service.BaseURL)
 	app.initializeRoutes(ctrlHTTP)
 
 	return app, nil

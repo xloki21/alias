@@ -2,6 +2,7 @@ service:
   http: alias:8080
   grpc: alias:8081
   grpc-gateway: alias:8082
+  base-url: http://localhost:8080
 storage:
   type: mongodb # in-memory | mongodb
   config:
