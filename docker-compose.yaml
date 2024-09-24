@@ -4,7 +4,7 @@ services:
       - in-memory
       - mongodb
     container_name: alias
-    image: alias:v1.0.0beta
+    image: ${ALIAS_IMAGE_NAME:-alias:1.0.0}
     environment:
       MONGO_USERNAME: ${MONGO_USERNAME:-user}
       MONGO_PASSWORD: ${MONGO_PASSWORD:-pass}
@@ -13,10 +13,13 @@ services:
       context: .
     ports:
       - "8080:8080"
+      - "8081:8081"
+      - "8082:8082"
     volumes:
       - ./config/config.docker.yaml:/etc/alias/config.yaml
     networks:
       - aliasnet
+
   mongodb:
     profiles:
       - mongodb
@@ -35,6 +38,21 @@ services:
       - ./migrations/mongodb/mongo-init.sh:/docker-entrypoint-initdb.d/mongo-init.sh:ro
     networks:
       - aliasnet
+
+  alias-client:
+    profiles:
+      - client
+    image: ${ALIAS_IMAGE_NAME:-alias:1.0.0}
+    entrypoint: /bin/alias-client
+    container_name: alias-client
+    expose:
+      - 8081:8081
+    command:
+      - --address=alias:8081
+      - --message=let me look for ya with http://www.ya.ru or http://www.google.com.
+    networks:
+      - aliasnet
+
 networks:
   aliasnet:
     driver: bridge

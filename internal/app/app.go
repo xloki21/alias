@@ -4,30 +4,39 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/xloki21/alias/internal/app/config"
-	"github.com/xloki21/alias/internal/controller"
-	"github.com/xloki21/alias/internal/controller/mw"
+	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"github.com/xloki21/alias/internal/config"
+	"github.com/xloki21/alias/internal/controller/grpcc"
+	"github.com/xloki21/alias/internal/controller/grpcc/interceptors"
+	"github.com/xloki21/alias/internal/controller/httpc"
+	"github.com/xloki21/alias/internal/controller/httpc/mw"
 	"github.com/xloki21/alias/internal/domain"
+	aliasapi "github.com/xloki21/alias/internal/gen/go/pbuf/alias"
 	"github.com/xloki21/alias/internal/infrastructure/squeue"
 	"github.com/xloki21/alias/internal/repository"
 	"github.com/xloki21/alias/internal/repository/inmemory"
 	"github.com/xloki21/alias/internal/repository/mongodb"
-	"github.com/xloki21/alias/internal/service/link"
-	"github.com/xloki21/alias/internal/service/manager"
-	"github.com/xloki21/alias/internal/service/stats"
+	"github.com/xloki21/alias/internal/services/aliassvc"
+	"github.com/xloki21/alias/internal/services/managersvc"
+	"github.com/xloki21/alias/internal/services/statssvc"
+	"github.com/xloki21/alias/pkg/keygen"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.uber.org/zap"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/reflection"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"syscall"
 	"time"
 )
 
 const (
-	httpServerReadTimeout   = 10 * time.Second
-	httpServerWriteTimeout  = 10 * time.Second
-	gracefulShutdownTimeout = 5 * time.Second
+	httpServerReadTimeout  = 10 * time.Second
+	httpServerWriteTimeout = 10 * time.Second
 )
 
 const (
@@ -36,39 +45,45 @@ const (
 
 const (
 	apiV1               = "/api/v1"
-	endpointCreateAlias = apiV1 + "/alias"
+	endpointAlias       = apiV1 + "/alias"
 	endpointHealthcheck = apiV1 + "/healthcheck"
 	endpointRedirect    = ""
-	endpointRemoveLink  = apiV1 + "/remove"
 )
 
 type Application struct {
-	address    string
-	router     *http.ServeMux
-	controller *controller.AliasController
+	HTTPServer        *http.Server
+	GRPCGatewayServer *http.Server
+	GRPCServer        *grpc.Server
+	grpcListener      net.Listener
 }
 
 func New(cfg config.AppConfig) (*Application, error) {
 	ctx := context.Background()
-	baseURLPrefix := fmt.Sprintf("http://%s%s", cfg.Server.Address, endpointRedirect)
-
-	var aliasService *link.AliasService
 
 	aliasUsedQ := squeue.New()
 	aliasExpiredQ := squeue.New()
 
+	var managerService *managersvc.Manager
+	var statsService *statssvc.Statistics
+	var aliasService *aliassvc.Alias
+
+	keyGen := keygen.NewURLSafeRandomStringGenerator()
+
 	switch cfg.Storage.Type {
 	case repository.MongoDB:
 
-		credential := options.Credential{
-			AuthSource: cfg.Storage.MongoDB.Credentials.AuthSource,
-			Username:   cfg.Storage.MongoDB.Credentials.User,
-			Password:   cfg.Storage.MongoDB.Credentials.Password,
-		}
 		clientOptions := options.Client().
 			ApplyURI(cfg.Storage.MongoDB.URI).
-			SetAuth(credential).
 			SetServerSelectionTimeout(mongoDBServerSelectionTimeout)
+
+		if cfg.Storage.MongoDB.Credentials.AuthSource != "" {
+			credential := options.Credential{
+				AuthSource: cfg.Storage.MongoDB.Credentials.AuthSource,
+				Username:   cfg.Storage.MongoDB.Credentials.User,
+				Password:   cfg.Storage.MongoDB.Credentials.Password,
+			}
+			clientOptions.SetAuth(credential)
+		}
 
 		client, err := mongo.Connect(ctx, clientOptions)
 
@@ -89,90 +104,129 @@ func New(cfg config.AppConfig) (*Application, error) {
 			return nil, err
 		}
 
-		aliasRepoMongoDB := mongodb.NewMongoDBAliasRepository(db.Collection(mongodb.AliasCollectionName))
-		statsRepoMongoDB := mongodb.NewAliasStatsRepository(db.Collection(mongodb.StatsCollectionName))
-		aliasManagerSvc := manager.NewAliasManagerService(aliasRepoMongoDB, aliasUsedQ)
-		aliasManagerSvc.Process(ctx)
-
-		aliasStatsSvc := stats.NewAliasStatisticsService(statsRepoMongoDB, aliasExpiredQ)
-		aliasStatsSvc.Process(ctx)
-
-		aliasService = link.NewAliasService(aliasExpiredQ, aliasUsedQ, aliasRepoMongoDB)
+		aliasRepo := mongodb.NewAliasRepository(db.Collection(mongodb.AliasCollectionName))
+		statsRepo := mongodb.NewStatisticsRepository(db.Collection(mongodb.StatsCollectionName))
+		managerService = managersvc.NewManager(aliasRepo, aliasUsedQ)
+		statsService = statssvc.NewStatistics(statsRepo, aliasExpiredQ)
+		aliasService = aliassvc.NewAlias(aliasExpiredQ, aliasUsedQ, aliasRepo, keyGen)
 
 	case repository.InMemory:
-		zap.S().Info("using in-memory storage type")
-		aliasRepoInMemory := inmemory.NewAliasRepository()
-		statsRepoInMemory := inmemory.NewAliasStatsRepository()
-
-		aliasManagerSvc := manager.NewAliasManagerService(aliasRepoInMemory, aliasUsedQ)
-		aliasManagerSvc.Process(ctx)
-
-		aliasStatsSvc := stats.NewAliasStatisticsService(statsRepoInMemory, aliasExpiredQ)
-		aliasStatsSvc.Process(ctx)
-
-		aliasService = link.NewAliasService(aliasExpiredQ, aliasUsedQ, aliasRepoInMemory)
+		aliasRepo := inmemory.NewAliasRepository()
+		statsRepo := inmemory.NewStatisticsRepository()
+		managerService = managersvc.NewManager(aliasRepo, aliasUsedQ)
+		statsService = statssvc.NewStatistics(statsRepo, aliasExpiredQ)
+		aliasService = aliassvc.NewAlias(aliasExpiredQ, aliasUsedQ, aliasRepo, keyGen)
 
 	default:
 		zap.S().Fatalf("unknown storage type: %s", cfg.Storage.Type)
 		return nil, domain.ErrUnknownStorageType
 	}
+	managerService.Process(ctx)
+	statsService.Process(ctx)
 
-	ctrl := controller.NewAliasController(aliasService, baseURLPrefix)
+	zap.S().Infow("core", zap.String("state", "selected storage type"), zap.String("type", string(cfg.Storage.Type)))
 
-	app := &Application{
-		address:    cfg.Server.Address,
-		router:     http.NewServeMux(),
-		controller: ctrl,
+	grpcServer := grpc.NewServer(grpc.UnaryInterceptor(interceptors.LoggingInterceptor))
+	reflection.Register(grpcServer)
+	aliasapi.RegisterAliasAPIServer(grpcServer, grpcc.NewController(aliasService, cfg.Service.BaseURL))
+
+	listener, err := net.Listen("tcp", cfg.Service.GRPC)
+	if err != nil {
+		zap.S().Fatalw("core", zap.String("application error", err.Error()))
+		return nil, err
 	}
 
-	app.initializeRoutes()
+	gwmux := runtime.NewServeMux()
+	opts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
+
+	if err := aliasapi.RegisterAliasAPIHandlerFromEndpoint(ctx, gwmux, cfg.Service.GRPC, opts); err != nil {
+		zap.S().Fatalw("core", zap.String("application error", err.Error()))
+		return nil, err
+	}
+
+	app := &Application{
+		HTTPServer: &http.Server{
+			Addr:         cfg.Service.HTTP,
+			ReadTimeout:  httpServerReadTimeout,
+			WriteTimeout: httpServerWriteTimeout,
+			Handler:      http.DefaultServeMux,
+		},
+		GRPCServer: grpcServer,
+		GRPCGatewayServer: &http.Server{
+			Addr:    cfg.Service.GRPCGateway,
+			Handler: gwmux,
+		},
+		grpcListener: listener,
+	}
+	ctrlHTTP := httpc.NewController(aliasService, cfg.Service.BaseURL)
+	app.initializeRoutes(ctrlHTTP)
 
 	return app, nil
 }
 
 func (a *Application) Run(ctx context.Context) error {
-	ctx, cancelFn := context.WithCancel(ctx)
+	ctx, cancelFn := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer cancelFn()
-
-	server := &http.Server{
-		Addr:         a.address,
-		ReadTimeout:  httpServerReadTimeout,
-		WriteTimeout: httpServerWriteTimeout,
-		Handler:      a.router,
-	}
 
 	errChan := make(chan error)
 	go func() {
-		zap.S().Infof("listening on %s", server.Addr)
-		if err := server.ListenAndServe(); err != nil {
+		zap.S().Infow("HTTP", zap.String("state", fmt.Sprintf("start server, listening on %s", a.HTTPServer.Addr)))
+		if err := a.HTTPServer.ListenAndServe(); err != nil {
 			if !errors.Is(err, http.ErrServerClosed) {
 				errChan <- err
 			}
 		}
 	}()
 
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, os.Interrupt)
+	go func() {
+		zap.S().Infow("gRPC-gw", zap.String("state", fmt.Sprintf("start server, listening on %s", a.GRPCGatewayServer.Addr)))
+		if err := a.GRPCGatewayServer.ListenAndServe(); err != nil {
+			if !errors.Is(err, http.ErrServerClosed) {
+				errChan <- err
+			}
+		}
+	}()
+
+	go func() {
+		zap.S().Infow("gRPC", zap.String("state", fmt.Sprintf("start server, listening on %s", a.grpcListener.Addr())))
+		if err := a.GRPCServer.Serve(a.grpcListener); err != nil {
+			zap.S().Fatalw("core", zap.String("application error", err.Error()))
+		}
+	}()
 
 	select {
-	case <-quit:
-		zap.S().Info("gracefully shutting down server")
-		return server.Shutdown(ctx)
 	case <-ctx.Done():
-		zap.S().Warn("Context was cancelled, shutting down server")
-		ctxTimeout, cancel := context.WithTimeout(context.Background(), gracefulShutdownTimeout)
-		defer cancel()
-		return server.Shutdown(ctxTimeout)
+		zap.S().Infow("core", zap.String("state", "application graceful shutdown begins"))
+		zap.S().Infow("core", zap.String("state", "shutting down http server"))
+		err := a.HTTPServer.Shutdown(ctx)
+		if err != nil {
+			return err
+		}
+		zap.S().Infow("core", zap.String("state", "HTTP server stopped"))
+		zap.S().Infow("core", zap.String("state", "shutting down gRPC-gateway server"))
 
+		err = a.GRPCGatewayServer.Shutdown(ctx)
+		if err != nil {
+			return err
+		}
+		zap.S().Infow("core", zap.String("state", "gRPC-gateway server stopped"))
+
+		zap.S().Infow("core", zap.String("state", "shutting down gRPC-server"))
+		a.GRPCServer.GracefulStop()
+		zap.S().Infow("core", zap.String("state", "gRPC-server stopped"))
+		return nil
 	case err := <-errChan:
-		zap.S().Errorf("server main loop error: %s", err.Error())
+		zap.S().Fatalw("core", zap.String("application error", err.Error()))
 		return err
 	}
 }
 
-func (a *Application) initializeRoutes() {
-	a.router.HandleFunc(endpointCreateAlias, mw.Use(a.controller.CreateAlias, mw.RequestThrottler, mw.Logging, mw.PanicRecovery))
-	a.router.HandleFunc(endpointHealthcheck, mw.Use(a.controller.Healthcheck, mw.RequestThrottler, mw.Logging, mw.PanicRecovery))
-	a.router.HandleFunc(endpointRemoveLink, mw.Use(a.controller.RemoveAlias, mw.RequestThrottler, mw.Logging, mw.PanicRecovery))
-	a.router.HandleFunc(endpointRedirect+"/{linkID}", mw.Use(a.controller.Redirect, mw.RequestThrottler, mw.Logging, mw.PanicRecovery))
+func (a *Application) initializeRoutes(ctrl *httpc.Controller) {
+	zap.S().Infow("core", zap.String("state", "initialize http-routes"))
+	mux := http.NewServeMux()
+	mux.HandleFunc(endpointAlias, mw.Use(ctrl.CreateAlias, mw.RequestThrottler, mw.Logging, mw.PanicRecovery))
+	mux.HandleFunc(endpointHealthcheck, mw.Use(ctrl.Healthcheck, mw.RequestThrottler, mw.Logging, mw.PanicRecovery))
+	mux.HandleFunc(endpointAlias+"/{key}", mw.Use(ctrl.RemoveAlias, mw.RequestThrottler, mw.Logging, mw.PanicRecovery))
+	mux.HandleFunc(endpointRedirect+"/{key}", mw.Use(ctrl.Redirect, mw.RequestThrottler, mw.Logging, mw.PanicRecovery))
+	a.HTTPServer.Handler = mux
 }

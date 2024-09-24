@@ -1,7 +1,6 @@
 package domain
 
 import (
-	"fmt"
 	"time"
 )
 
@@ -12,7 +11,7 @@ type AliasUsed struct {
 }
 
 func (a AliasUsed) String() string {
-	return fmt.Sprintf("%s: %s", "AliasUsed", a.Key)
+	return "AliasUsed"
 }
 
 // AliasExpired is a struct that represents an alias link expired event.
@@ -22,5 +21,5 @@ type AliasExpired struct {
 }
 
 func (u AliasExpired) String() string {
-	return fmt.Sprintf("%s: %s", "AliasExpired", u.Key)
+	return "AliasExpired"
 }

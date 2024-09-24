@@ -1,0 +1,67 @@
+syntax = "proto3";
+
+package api.v1;
+option go_package = "pbuf/alias";
+
+import "google/api/annotations.proto";
+import "google/protobuf/empty.proto";
+
+
+service AliasAPI {
+  rpc Create(CreateRequest) returns (CreateResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/alias"
+      body: "*"
+    };
+  };
+
+  rpc HealthCheck(google.protobuf.Empty) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      get: "/api/v1/healthcheck"
+    };
+  };
+
+  rpc Remove(KeyRequest) returns (google.protobuf.Empty){
+    option (google.api.http) = {
+      delete: "/api/v1/alias/{key}"
+    };
+  };
+  rpc FindOriginalURL(KeyRequest) returns (FindResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/alias/{key}"
+    };
+  };
+
+  rpc ProcessMessage(ProcessMessageRequest) returns (ProcessMessageResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/process"
+      body: "*"
+    };
+  };
+
+}
+
+message ProcessMessageRequest{
+  string message = 1;
+}
+
+message ProcessMessageResponse {
+  string message = 1;
+}
+
+message CreateRequest {
+  repeated string urls = 1;
+  optional uint64 max_usage_count = 2;
+}
+
+message CreateResponse {
+  repeated string urls = 1;
+}
+
+message KeyRequest {
+  string key = 1;
+}
+
+message FindResponse {
+  string url = 1;
+}

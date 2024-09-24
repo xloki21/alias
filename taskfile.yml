@@ -1,21 +1,144 @@
 version: '3'
 
 tasks:
-  build:
-    desc: Build app
-    cmd: go build -o aliassrv -v ./cmd/main.go
-  mongodb:
-    desc: Start MongoDB container
-    cmd: docker compose --profile=mongodb up mongodb -d
+  generate-mocks:
+    cmd: go generate ./...
+    desc: "Generate mocks using mockery"
+
+  build-server-app:
+    cmd: go build -o alias-server -v ./cmd/server/main.go
+    desc: "Build server app"
+
+  build-client-app:
+    cmd: go build -o alias-client -v ./cmd/client/main.go
+    desc: "Build client app"
+
+
+
+  coverage:
+    cmds:
+      - go test -coverprofile=coverage.out ./...
+      - go tool cover -html=coverage.out -o coverage.html
+    desc: "Run tests with coverage and generate HTML report"
+
+  test-with-coverage:
+    deps: [ generate-mocks ]
+    cmds:
+      - task: test
+      - task: coverage
+    desc: "Generate mocks, run tests, and calculate coverage"
+
+  test:
+    deps: [ generate-mocks ]
+    cmds:
+      - task: mock-test
+      - task: integration-test
+      - task: e2e-test
+    desc: "Run all tests"
+
   docker:
-    desc: Build docker image
-    cmd: docker build . -t alias:v1.0.0beta
+    cmd: docker build . -t alias:1.0.0
+    desc: "Build docker image"
+
   integration-test:
-    desc: Run integration tests
     cmds:
       - go clean -testcache
-      - go test -tags=integration -v ./internal/tests/...
-  e2e-test:
-    desc: Run e2e tests
+      - go test -tags=integration -v ./tests/...
+    desc: "Run integration tests"
+
+  mock-test:
     cmds:
-      - go test -tags=e2e -v ./internal/tests/...
+      - task: generate-mocks
+      - go test -tags=mock -v ./internal/services/...
+    desc: "Run mock tests"
+
+  e2e-test:
+    cmds:
+      - go test -tags=e2e -v ./tests/...
+    desc: "Run e2e tests"
+
+  grpc-ensure-protoc:
+    cmds:
+      - |
+        if ! command -v protoc &> /dev/null; then
+          echo "protoc could not be found, installing it now..."
+          mkdir -p /tmp/protoc_install
+          curl -Lo /tmp/protoc_install/protoc.zip https://github.com/protocolbuffers/protobuf/releases/download/v27.3/protoc-27.3-linux-x86_64.zip
+          unzip /tmp/protoc_install/protoc.zip -d /usr/local
+          rm -rf /tmp/protoc_install
+          echo "protoc installed successfully!"
+        else
+          echo "protoc is already installed"
+        fi
+      - protoc --version
+    desc: "Ensure protoc is installed"
+
+  grpc-ensure-plugins:
+    cmds:
+      - |
+        if ! command -v protoc-gen-go &> /dev/null; then
+          echo "Installing protoc-gen-go..."
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+          echo "protoc-gen-go installed"
+        else
+          echo "protoc-gen-go is already installed"
+        fi
+      - |
+        if ! command -v protoc-gen-go-grpc &> /dev/null; then
+          echo "Installing protoc-gen-go-grpc..."
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+          echo "protoc-gen-go-grpc installed"
+        else
+          echo "protoc-gen-go-grpc is already installed"
+        fi
+      - |
+        if ! command -v protoc-gen-grpc-gateway &> /dev/null; then
+          echo "Installing protoc-gen-grpc-gateway..."
+          go install github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-grpc-gateway@latest
+          echo "protoc-gen-grpc-gateway installed"
+        else
+          echo "protoc-gen-grpc-gateway is already installed"
+        fi
+    desc: "Ensure plugins are installed"
+
+  grpc-download-vendor-protos:
+    cmds:
+      - echo "Cloning Google APIs repo"
+      - mkdir -p vendor-proto
+      - git clone https://github.com/googleapis/googleapis.git vendor-proto/googleapis
+      - echo "Cloning gRPC-Gateway repo"
+      - git clone https://github.com/grpc-ecosystem/grpc-gateway.git vendor-proto/grpc-gateway
+    desc: "Clone full Google API and gRPC-Gateway proto repositories"
+
+  grpc-generate-proto:
+    cmds:
+      - echo "Generating gRPC and gRPC-Gateway code"
+      -
+      - mkdir -p internal/gen/go
+      - |
+        protoc --proto_path=internal/api/ \
+               --proto_path=vendor-proto/googleapis \
+               --proto_path=vendor-proto/grpc-gateway \
+               --go_out=internal/gen/go \
+               --go-grpc_out=internal/gen/go \
+               --grpc-gateway_out=internal/gen/go \
+               internal/api/api.proto
+      - echo "Generating OpenAPI (Swagger) definitions with openapiv2"
+      - mkdir -p internal/gen/swagger
+      - |
+        protoc --proto_path=internal/api/ \
+               --proto_path=vendor-proto/googleapis \
+               --proto_path=vendor-proto/grpc-gateway \
+               --openapiv2_out=internal/gen/swagger \
+               --openapiv2_opt=logtostderr=true,allow_merge=true,merge_file_name=alias \
+               internal/api/api.proto
+    deps:
+      - grpc-ensure-protoc
+      - grpc-ensure-plugins
+    desc: "Generate gRPC and gRPC-Gateway code"
+
+  clean:
+    cmds:
+      - echo "Cleaning generated files..."
+      - rm -rf internal/gen/go internal/gen/swagger vendor-proto internal/services/aliassvc/mocks
+    desc: "Clean generated files"

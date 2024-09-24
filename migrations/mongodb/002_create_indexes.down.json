@@ -1,6 +1,6 @@
 [
   {
     "dropIndexes": "aliases",
-    "index": "unique_alias"
+    "index": "unique_key"
   }
 ]

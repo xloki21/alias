@@ -5,18 +5,29 @@ import (
 	"time"
 )
 
-// Alias is a struct that represents an alias for an origin url.
-type Alias struct {
-	ID          string
-	Origin      *url.URL
-	Key         string
-	TTL         int
-	IsActive    bool
+type TTLParams struct {
+	TriesLeft   int
 	IsPermanent bool
 }
 
+// Alias is a struct that represents an alias for an origin url.
+type Alias struct {
+	ID       string
+	Key      string
+	URL      *url.URL
+	IsActive bool
+	Params   TTLParams
+}
+
+// CreateRequest is a struct that represents an alias creation request.
+type CreateRequest struct {
+	Params TTLParams
+	URL    *url.URL
+}
+
 func (a Alias) Type() string {
-	if a.IsPermanent {
+
+	if a.Params.IsPermanent {
 		return "permanent"
 	}
 	return "ttl-restricted"

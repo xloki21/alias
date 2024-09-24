@@ -1,0 +1,7 @@
+all: True
+dir: mocks/{{ replaceAll .InterfaceDirRelative "internal" "internal_" }}
+mockname: "Mock{{.InterfaceName | camelcase}}"
+outpkg: "mocks"
+filename: "mock_{{.InterfaceName}}.go"
+packages:
+  github.com/xloki21/alias/internal/services/aliassvc:

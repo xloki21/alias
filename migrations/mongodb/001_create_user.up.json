@@ -1,11 +1,11 @@
 [
   {
-    "createUser": "user2",
-    "pwd": "pass2",
+    "createUser": "user",
+    "pwd": "pass",
     "roles": [
       {
         "role": "dbOwner",
-        "db": "appdb2"
+        "db": "appdb"
       }
     ]
   }
