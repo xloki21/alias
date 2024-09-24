@@ -2,6 +2,7 @@ package grpcc
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/xloki21/alias/internal/domain"
 	aliasapi "github.com/xloki21/alias/internal/gen/go/pbuf/alias"
@@ -55,7 +56,7 @@ func (c *Controller) Create(ctx context.Context, data *aliasapi.CreateRequest) (
 
 	answer, err := c.service.Create(ctx, createRequests)
 	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, err.Error())
+		return nil, status.Error(codes.InvalidArgument, domain.ErrAliasCreationFailed.Error())
 	}
 	aliases := make([]string, len(answer))
 	for index, alias := range answer {
@@ -68,7 +69,10 @@ func (c *Controller) Create(ctx context.Context, data *aliasapi.CreateRequest) (
 func (c *Controller) Remove(ctx context.Context, data *aliasapi.KeyRequest) (*emptypb.Empty, error) {
 
 	if err := c.service.Remove(ctx, data.Key); err != nil {
-		return nil, status.Error(codes.NotFound, err.Error())
+		if errors.Is(err, domain.ErrAliasNotFound) {
+			return nil, status.Error(codes.NotFound, domain.ErrAliasNotFound.Error())
+		}
+		return nil, status.Error(codes.Internal, domain.ErrInternal.Error())
 	}
 	return nil, nil
 }
@@ -79,10 +83,6 @@ func (c *Controller) FindOriginalURL(ctx context.Context, data *aliasapi.KeyRequ
 		return nil, status.Error(codes.NotFound, err.Error())
 	}
 	return &aliasapi.FindResponse{Url: fmt.Sprintf("%s/%s", c.address, alias.Key)}, nil
-}
-
-func (c *Controller) HealthCheck(ctx context.Context, empty *emptypb.Empty) (*emptypb.Empty, error) {
-	return nil, nil
 }
 
 func (c *Controller) ProcessMessage(ctx context.Context, data *aliasapi.ProcessMessageRequest) (*aliasapi.ProcessMessageResponse, error) {

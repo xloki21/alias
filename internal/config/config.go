@@ -66,7 +66,7 @@ func NewZapLogger(cfg LoggerConfig) (*zap.Logger, error) {
 	return zcfg.Build()
 }
 
-func MustLoad() (AppConfig, error) {
+func Load() (AppConfig, error) {
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
 	viper.AddConfigPath("/etc/alias/")

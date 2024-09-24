@@ -13,7 +13,18 @@ tasks:
     cmd: go build -o alias-client -v ./cmd/client/main.go
     desc: "Build client app"
 
-
+  ensure-mockery-installed:
+    cmds:
+      - |
+        if ! command -v mockery &> /dev/null; then
+          echo "mockery could not be found, installing it now..."
+          go install github.com/vektra/mockery/v2@v2.46.0
+          echo "mockery installed successfully!"
+        else
+          echo "mockery is already installed"
+        fi
+      - mockery --version
+    desc: "Ensure mockery is installed"
 
   coverage:
     cmds:
@@ -48,6 +59,7 @@ tasks:
 
   mock-test:
     cmds:
+      - task: ensure-mockery-installed
       - task: generate-mocks
       - go test -tags=mock -v ./internal/services/...
     desc: "Run mock tests"
@@ -63,7 +75,7 @@ tasks:
         if ! command -v protoc &> /dev/null; then
           echo "protoc could not be found, installing it now..."
           mkdir -p /tmp/protoc_install
-          curl -Lo /tmp/protoc_install/protoc.zip https://github.com/protocolbuffers/protobuf/releases/download/v27.3/protoc-27.3-linux-x86_64.zip
+          curl -Lo /tmp/protoc_install/protoc.zip https://github.com/protocolbuffers/protobuf/releases/download/v28.2/protoc-28.2-linux-x86_64.zip
           unzip /tmp/protoc_install/protoc.zip -d /usr/local
           rm -rf /tmp/protoc_install
           echo "protoc installed successfully!"
@@ -92,6 +104,14 @@ tasks:
           echo "protoc-gen-go-grpc is already installed"
         fi
       - |
+        if ! command -v protoc-gen-openapiv2 &> /dev/null; then
+          echo "Installing protoc-gen-openapiv2..."
+          go install github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2
+          echo "protoc-gen-openapiv2 installed"
+        else
+          echo "protoc-gen-openapiv2 is already installed"
+        fi
+      - |
         if ! command -v protoc-gen-grpc-gateway &> /dev/null; then
           echo "Installing protoc-gen-grpc-gateway..."
           go install github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-grpc-gateway@latest
@@ -99,6 +119,7 @@ tasks:
         else
           echo "protoc-gen-grpc-gateway is already installed"
         fi
+
     desc: "Ensure plugins are installed"
 
   grpc-download-vendor-protos:

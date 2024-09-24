@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"github.com/xloki21/alias/internal/domain"
 	"go.uber.org/zap"
-	"sync"
+	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -57,60 +57,34 @@ func (s *Alias) Create(ctx context.Context, requests []domain.CreateRequest) ([]
 		zap.String("fn", fn),
 		zap.Int("requests count", len(requests)))
 
-	type indexedResult struct {
-		index int
-		alias domain.Alias
-	}
+	g := errgroup.Group{}
+	g.SetLimit(maxGoroutines)
 
-	// validate request
-	wg := sync.WaitGroup{}
-	semaphore := make(chan struct{}, maxGoroutines)
-	errChan := make(chan error, len(requests))
-	resultChan := make(chan indexedResult, len(requests))
+	aliases := make([]domain.Alias, len(requests))
 	for index := range requests {
-		semaphore <- struct{}{}
-		wg.Add(1)
-		go func(index int) {
-			defer wg.Done()
-
+		index := index
+		g.Go(func() error {
 			key, err := s.keyGenerator.Generate(keyLength)
 			if err != nil {
-				errChan <- fmt.Errorf("%s: %w", fn, err)
+				return fmt.Errorf("%s: %w", fn, err)
 			}
-
-			resultChan <- indexedResult{
-				index: index,
-				alias: domain.Alias{
-					Key:      key,
-					IsActive: true,
-					URL:      requests[index].URL,
-					Params:   requests[index].Params,
-				},
+			aliases[index] = domain.Alias{
+				Key:      key,
+				IsActive: true,
+				URL:      requests[index].URL,
+				Params:   requests[index].Params,
 			}
-
-		}(index)
-		<-semaphore
+			return nil
+		})
 	}
-	wg.Wait()
-
-	close(semaphore)
-	close(errChan)
-	close(resultChan)
-
-	for err := range errChan {
-		if err != nil {
-			zap.S().WithOptions(zap.AddStacktrace(zap.PanicLevel)).
-				Errorw("service",
-					zap.String("name", s.Name()),
-					zap.String("fn", fn),
-					zap.Error(err),
-				)
-			return nil, err
-		}
-	}
-	aliases := make([]domain.Alias, len(requests))
-	for entry := range resultChan {
-		aliases[entry.index] = entry.alias
+	if err := g.Wait(); err != nil {
+		zap.S().WithOptions(zap.AddStacktrace(zap.PanicLevel)).
+			Errorw("service",
+				zap.String("name", s.Name()),
+				zap.String("fn", fn),
+				zap.Error(err),
+			)
+		return nil, err
 	}
 
 	if err := s.repo.Save(ctx, aliases); err != nil {

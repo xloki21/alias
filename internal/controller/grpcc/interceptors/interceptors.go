@@ -11,8 +11,9 @@ import (
 // LoggingInterceptor prints log
 func LoggingInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 	zap.S().Infow("gRPC", zap.String("method", info.FullMethod),
-		zap.String("status", "received"))
+		zap.String("status", "received"), zap.Any("request", req))
 	tic := time.Now()
+
 	resp, err := handler(ctx, req)
 	duration := time.Since(tic)
 
@@ -23,6 +24,7 @@ func LoggingInterceptor(ctx context.Context, req interface{}, info *grpc.UnarySe
 
 	zap.S().Infow("gRPC", zap.String("method", info.FullMethod),
 		zap.String("status", "processed"),
-		zap.String("duration", durationString))
+		zap.String("duration", durationString),
+		zap.Any("response", resp))
 	return resp, err
 }

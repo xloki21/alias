@@ -20,7 +20,7 @@ func main() {
 		}
 	}
 
-	cfg, err := config.MustLoad()
+	cfg, err := config.Load()
 	if err != nil {
 		log.Fatal("failed to init application config: " + err.Error())
 	}

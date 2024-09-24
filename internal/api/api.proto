@@ -15,12 +15,6 @@ service AliasAPI {
     };
   };
 
-  rpc HealthCheck(google.protobuf.Empty) returns (google.protobuf.Empty) {
-    option (google.api.http) = {
-      get: "/api/v1/healthcheck"
-    };
-  };
-
   rpc Remove(KeyRequest) returns (google.protobuf.Empty){
     option (google.api.http) = {
       delete: "/api/v1/alias/{key}"
