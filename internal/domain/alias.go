@@ -6,7 +6,7 @@ import (
 )
 
 type TTLParams struct {
-	TriesLeft   int
+	TriesLeft   uint64
 	IsPermanent bool
 }
 

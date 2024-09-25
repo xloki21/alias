@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/bufbuild/protovalidate-go"
 	"github.com/xloki21/alias/internal/domain"
 	aliasapi "github.com/xloki21/alias/internal/gen/go/pbuf/alias"
 	"github.com/xloki21/alias/pkg/urlparser"
@@ -18,7 +19,7 @@ var _ aliasapi.AliasAPIServer = (*Controller)(nil)
 
 type aliasService interface {
 	Create(ctx context.Context, requests []domain.CreateRequest) ([]domain.Alias, error)
-	FindOriginalURL(ctx context.Context, key string) (*domain.Alias, error)
+	FindAlias(ctx context.Context, key string) (*domain.Alias, error)
 	Use(ctx context.Context, alias *domain.Alias) (*domain.Alias, error)
 	Remove(ctx context.Context, key string) error
 }
@@ -35,20 +36,26 @@ func NewController(service aliasService, address string) *Controller {
 
 func (c *Controller) Create(ctx context.Context, data *aliasapi.CreateRequest) (*aliasapi.CreateResponse, error) {
 	createRequests := make([]domain.CreateRequest, len(data.Urls))
-	isPermanent := data.MaxUsageCount == nil
-	triesLeft := data.GetMaxUsageCount()
 
-	for index, urlString := range data.Urls {
+	checker, err := protovalidate.New()
+	if err != nil {
+		return nil, err
+	}
 
-		validURL, err := url.Parse(urlString)
+	if err := checker.Validate(data); err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+
+	for index, item := range data.Urls {
+		validURL, err := url.Parse(item.Url)
 		if err != nil {
 			return nil, status.Error(codes.InvalidArgument, "invalid url fmt")
 		}
 
 		createRequests[index] = domain.CreateRequest{
 			Params: domain.TTLParams{
-				TriesLeft:   int(triesLeft),
-				IsPermanent: isPermanent,
+				TriesLeft:   item.GetMaxUsageCount(),
+				IsPermanent: item.GetMaxUsageCount() == 0,
 			},
 			URL: validURL,
 		}
@@ -67,6 +74,14 @@ func (c *Controller) Create(ctx context.Context, data *aliasapi.CreateRequest) (
 }
 
 func (c *Controller) Remove(ctx context.Context, data *aliasapi.KeyRequest) (*emptypb.Empty, error) {
+	checker, err := protovalidate.New()
+	if err != nil {
+		return nil, err
+	}
+
+	if err := checker.Validate(data); err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
 
 	if err := c.service.Remove(ctx, data.Key); err != nil {
 		if errors.Is(err, domain.ErrAliasNotFound) {
@@ -77,27 +92,66 @@ func (c *Controller) Remove(ctx context.Context, data *aliasapi.KeyRequest) (*em
 	return nil, nil
 }
 
-func (c *Controller) FindOriginalURL(ctx context.Context, data *aliasapi.KeyRequest) (*aliasapi.FindResponse, error) {
-	alias, err := c.service.FindOriginalURL(ctx, data.Key)
+func (c *Controller) FindAlias(ctx context.Context, data *aliasapi.KeyRequest) (*aliasapi.Alias, error) {
+	checker, err := protovalidate.New()
+	if err != nil {
+		return nil, err
+	}
+
+	if err := checker.Validate(data); err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+
+	alias, err := c.service.FindAlias(ctx, data.Key)
 	if err != nil {
 		return nil, status.Error(codes.NotFound, err.Error())
 	}
-	return &aliasapi.FindResponse{Url: fmt.Sprintf("%s/%s", c.address, alias.Key)}, nil
+	return &aliasapi.Alias{
+		Id:       alias.ID,
+		Key:      alias.Key,
+		Url:      alias.URL.String(),
+		IsActive: alias.IsActive,
+		Params: &aliasapi.AliasParams{
+			IsPermanent: alias.Params.IsPermanent,
+			TriesLeft:   alias.Params.TriesLeft,
+		},
+	}, nil
+}
+
+func (c *Controller) FindOriginalURL(ctx context.Context, data *aliasapi.KeyRequest) (*aliasapi.SingleURL, error) {
+	checker, err := protovalidate.New()
+	if err != nil {
+		return nil, err
+	}
+
+	if err := checker.Validate(data); err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+
+	alias, err := c.service.FindAlias(ctx, data.Key)
+	if err != nil {
+		return nil, status.Error(codes.NotFound, err.Error())
+	}
+	return &aliasapi.SingleURL{
+		Url: alias.URL.String(),
+	}, nil
 }
 
 func (c *Controller) ProcessMessage(ctx context.Context, data *aliasapi.ProcessMessageRequest) (*aliasapi.ProcessMessageResponse, error) {
-	urls, err := urlparser.FindURLs(data.Message)
+	urls, err := urlparser.ExtractURLsFromText(data.Message)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
-	request := &aliasapi.CreateRequest{
-		Urls:          urls,
-		MaxUsageCount: nil,
+	if len(urls) == 0 {
+		// message without urls, nothing to do, return original message
+		return &aliasapi.ProcessMessageResponse{Message: data.Message}, nil
 	}
 
-	if len(request.Urls) == 0 {
-		// message without urls
-		return &aliasapi.ProcessMessageResponse{Message: data.Message}, nil
+	request := &aliasapi.CreateRequest{
+		Urls: make([]*aliasapi.SingleURL, len(urls)),
+	}
+	for index := range urls {
+		request.Urls[index] = &aliasapi.SingleURL{Url: urls[index]}
 	}
 
 	response, err := c.Create(ctx, request)

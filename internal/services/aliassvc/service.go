@@ -102,8 +102,8 @@ func (s *Alias) Create(ctx context.Context, requests []domain.CreateRequest) ([]
 	return aliases, nil
 }
 
-func (s *Alias) FindOriginalURL(ctx context.Context, key string) (*domain.Alias, error) {
-	fn := "FindOriginalURL"
+func (s *Alias) FindAlias(ctx context.Context, key string) (*domain.Alias, error) {
+	fn := "FindAlias"
 	zap.S().Infow("service",
 		zap.String("name", s.Name()),
 		zap.String("fn", fn),
@@ -145,7 +145,7 @@ func (s *Alias) Use(ctx context.Context, alias *domain.Alias) (*domain.Alias, er
 		zap.String("fn", fn),
 		zap.String("alias", alias.Type()),
 		zap.String("key", alias.Key),
-		zap.Int("tries left", alias.Params.TriesLeft))
+		zap.Uint64("tries left", alias.Params.TriesLeft))
 
 	// publish event
 	event := alias.Redirected()

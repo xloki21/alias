@@ -5,7 +5,7 @@ option go_package = "pbuf/alias";
 
 import "google/api/annotations.proto";
 import "google/protobuf/empty.proto";
-
+import "buf/validate/validate.proto";
 
 service AliasAPI {
   rpc Create(CreateRequest) returns (CreateResponse) {
@@ -20,9 +20,16 @@ service AliasAPI {
       delete: "/api/v1/alias/{key}"
     };
   };
-  rpc FindOriginalURL(KeyRequest) returns (FindResponse) {
+
+  rpc FindAlias(KeyRequest) returns (Alias) {
     option (google.api.http) = {
       get: "/api/v1/alias/{key}"
+    };
+  };
+
+  rpc FindOriginalURL(KeyRequest) returns (SingleURL) {
+    option (google.api.http) = {
+      get: "/api/v1/alias/{key}/url"
     };
   };
 
@@ -40,22 +47,46 @@ message ProcessMessageRequest{
 }
 
 message ProcessMessageResponse {
-  string message = 1;
+  string message = 1 ;
+}
+
+message SingleURL {
+  string url = 1 [(buf.validate.field).cel = {
+    id: "valid_url"
+    message: "url must be a valid URL"
+    expression: "this.isUri()"
+  }];
+  optional uint64 max_usage_count = 2;
+}
+
+message AliasParams{
+  uint64 tries_left = 1;
+  bool is_permanent = 2;
+}
+
+message Alias {
+  string id = 1;
+  string key = 2;
+  string url = 3;
+  bool is_active = 4;
+  AliasParams params = 5;
+}
+
+message KeyRequest {
+  string key = 1[(buf.validate.field).string = {
+    min_len:1
+  }];
 }
 
 message CreateRequest {
-  repeated string urls = 1;
-  optional uint64 max_usage_count = 2;
+  repeated SingleURL urls = 1[(buf.validate.field).repeated = {
+    min_items: 1
+    max_items: 2000
+  }];
 }
 
 message CreateResponse {
   repeated string urls = 1;
 }
 
-message KeyRequest {
-  string key = 1;
-}
 
-message FindResponse {
-  string url = 1;
-}

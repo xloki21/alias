@@ -103,7 +103,7 @@ func (a *AliasRepository) Find(ctx context.Context, key string) (*domain.Alias, 
 		Key:      doc.Key,
 		URL:      doc.URL,
 		IsActive: doc.IsActive,
-		Params:   domain.TTLParams{TriesLeft: doc.TriesLeft, IsPermanent: doc.IsPermanent},
+		Params:   domain.TTLParams{TriesLeft: uint64(doc.TriesLeft), IsPermanent: doc.IsPermanent},
 	}
 	return alias, nil
 }

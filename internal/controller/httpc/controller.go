@@ -11,20 +11,22 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"strconv"
 )
 
 const maxGoroutines = 10
 
 type aliasService interface {
 	Create(ctx context.Context, requests []domain.CreateRequest) ([]domain.Alias, error)
-	FindOriginalURL(ctx context.Context, key string) (*domain.Alias, error)
+	FindAlias(ctx context.Context, key string) (*domain.Alias, error)
 	Use(ctx context.Context, alias *domain.Alias) (*domain.Alias, error)
 	Remove(ctx context.Context, key string) error
 }
 
 type requestURLList struct {
-	URLs []string `json:"urls"`
+	URLs []struct {
+		Url           string `json:"url"`
+		MaxUsageCount uint64 `json:"maxUsageCount"`
+	} `json:"urls"`
 }
 
 type responseURLList struct {
@@ -44,25 +46,6 @@ func (ac *Controller) CreateAlias(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 		return
-	}
-
-	// parse query params
-	query := r.URL.Query()
-	var isPermanent bool
-	var triesLeftValue int
-	if maxUsageCount, ok := query["maxUsageCount"]; !ok {
-		isPermanent = true
-	} else {
-		if len(maxUsageCount) != 1 {
-			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
-			return
-		}
-		value, err := strconv.ParseInt(maxUsageCount[0], 10, 64)
-		if err != nil {
-			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
-			return
-		}
-		triesLeftValue = int(value)
 	}
 
 	content, err := io.ReadAll(r.Body)
@@ -85,17 +68,18 @@ func (ac *Controller) CreateAlias(w http.ResponseWriter, r *http.Request) {
 	g := errgroup.Group{}
 	g.SetLimit(maxGoroutines)
 	requests := make([]domain.CreateRequest, len(payload.URLs), len(payload.URLs))
-	for index, urlString := range payload.URLs {
+	for index, singleURL := range payload.URLs {
 		index := index
-		urlString := urlString
+		singleURL := singleURL
 		g.Go(func() error {
 			requests[index] = domain.CreateRequest{}
-			validURL, err := url.Parse(urlString)
+			validURL, err := url.Parse(singleURL.Url)
 			if err != nil {
 				return domain.ErrInvalidURLFormat
 			}
+
 			requests[index] = domain.CreateRequest{
-				Params: domain.TTLParams{TriesLeft: triesLeftValue, IsPermanent: isPermanent},
+				Params: domain.TTLParams{TriesLeft: singleURL.MaxUsageCount, IsPermanent: singleURL.MaxUsageCount <= 0},
 				URL:    validURL,
 			}
 			return nil
@@ -144,7 +128,7 @@ func (ac *Controller) Redirect(w http.ResponseWriter, r *http.Request) {
 	}
 	key := r.PathValue("key")
 
-	alias, err := ac.service.FindOriginalURL(r.Context(), key)
+	alias, err := ac.service.FindAlias(r.Context(), key)
 
 	if err != nil {
 		if errors.Is(err, domain.ErrAliasNotFound) {

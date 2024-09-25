@@ -73,9 +73,27 @@ tasks:
     cmds:
       - |
         if ! command -v protoc &> /dev/null; then
+          version=28.2
+          unameOut="$(uname -s)"
+          case "${unameOut}" in
+              Linux*)  machine=linux;;
+              Darwin*) machine=osx;;
+              *)       machine="UNKNOWN:${unameOut}"
+          esac
+        
+          unameOut="$(uname -m)"
+          case "${unameOut}" in
+              arm64*)  arch=aarch_64;;
+              x86_64*) machine=x86_64;;
+              *)       machine="UNKNOWN:${unameOut}"
+          esac 
+          installer="protoc-${version}-${machine}-${arch}.zip"
+          installer_source="https://github.com/protocolbuffers/protobuf/releases/download/v${version}/${installer}"
+        
+        
           echo "protoc could not be found, installing it now..."
           mkdir -p /tmp/protoc_install
-          curl -Lo /tmp/protoc_install/protoc.zip https://github.com/protocolbuffers/protobuf/releases/download/v28.2/protoc-28.2-linux-x86_64.zip
+          curl -Lo /tmp/protoc_install/protoc.zip ${installer_source}
           unzip /tmp/protoc_install/protoc.zip -d /usr/local
           rm -rf /tmp/protoc_install
           echo "protoc installed successfully!"
@@ -95,6 +113,7 @@ tasks:
         else
           echo "protoc-gen-go is already installed"
         fi
+        
       - |
         if ! command -v protoc-gen-go-grpc &> /dev/null; then
           echo "Installing protoc-gen-go-grpc..."
@@ -124,8 +143,11 @@ tasks:
 
   grpc-download-vendor-protos:
     cmds:
-      - echo "Cloning Google APIs repo"
+      - rm -rf vendor-proto
       - mkdir -p vendor-proto
+      - echo "Cloning protovalidate repo"
+      - git clone https://github.com/bufbuild/protovalidate.git vendor-proto/protovalidate
+      - echo "Cloning Google APIs repo"
       - git clone https://github.com/googleapis/googleapis.git vendor-proto/googleapis
       - echo "Cloning gRPC-Gateway repo"
       - git clone https://github.com/grpc-ecosystem/grpc-gateway.git vendor-proto/grpc-gateway
@@ -138,6 +160,7 @@ tasks:
       - mkdir -p internal/gen/go
       - |
         protoc --proto_path=internal/api/ \
+               --proto_path=vendor-proto/protovalidate/proto/protovalidate \
                --proto_path=vendor-proto/googleapis \
                --proto_path=vendor-proto/grpc-gateway \
                --go_out=internal/gen/go \
@@ -148,6 +171,7 @@ tasks:
       - mkdir -p internal/gen/swagger
       - |
         protoc --proto_path=internal/api/ \
+               --proto_path=vendor-proto/protovalidate/proto/protovalidate \
                --proto_path=vendor-proto/googleapis \
                --proto_path=vendor-proto/grpc-gateway \
                --openapiv2_out=internal/gen/swagger \
