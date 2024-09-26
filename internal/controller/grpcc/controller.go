@@ -76,7 +76,7 @@ func (c *Controller) Create(ctx context.Context, data *aliasapi.CreateRequest) (
 func (c *Controller) Remove(ctx context.Context, data *aliasapi.KeyRequest) (*emptypb.Empty, error) {
 	checker, err := protovalidate.New()
 	if err != nil {
-		return nil, err
+		return nil, status.Error(codes.Internal, err.Error())
 	}
 
 	if err := checker.Validate(data); err != nil {
@@ -85,7 +85,7 @@ func (c *Controller) Remove(ctx context.Context, data *aliasapi.KeyRequest) (*em
 
 	if err := c.service.Remove(ctx, data.Key); err != nil {
 		if errors.Is(err, domain.ErrAliasNotFound) {
-			return nil, status.Error(codes.NotFound, domain.ErrAliasNotFound.Error())
+			return nil, status.Error(codes.NotFound, err.Error())
 		}
 		return nil, status.Error(codes.Internal, domain.ErrInternal.Error())
 	}
@@ -95,7 +95,7 @@ func (c *Controller) Remove(ctx context.Context, data *aliasapi.KeyRequest) (*em
 func (c *Controller) FindAlias(ctx context.Context, data *aliasapi.KeyRequest) (*aliasapi.Alias, error) {
 	checker, err := protovalidate.New()
 	if err != nil {
-		return nil, err
+		return nil, status.Error(codes.Internal, err.Error())
 	}
 
 	if err := checker.Validate(data); err != nil {
@@ -121,7 +121,7 @@ func (c *Controller) FindAlias(ctx context.Context, data *aliasapi.KeyRequest) (
 func (c *Controller) FindOriginalURL(ctx context.Context, data *aliasapi.KeyRequest) (*aliasapi.SingleURL, error) {
 	checker, err := protovalidate.New()
 	if err != nil {
-		return nil, err
+		return nil, status.Error(codes.Internal, err.Error())
 	}
 
 	if err := checker.Validate(data); err != nil {
@@ -134,6 +134,41 @@ func (c *Controller) FindOriginalURL(ctx context.Context, data *aliasapi.KeyRequ
 	}
 	return &aliasapi.SingleURL{
 		Url: alias.URL.String(),
+	}, nil
+}
+
+func (c *Controller) Use(ctx context.Context, data *aliasapi.KeyRequest) (*aliasapi.Alias, error) {
+	checker, err := protovalidate.New()
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	if err := checker.Validate(data); err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+
+	alias, err := c.service.FindAlias(ctx, data.Key)
+	if err != nil {
+		if errors.Is(err, domain.ErrAliasNotFound) {
+			return nil, status.Error(codes.NotFound, err.Error())
+		}
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	usedAlias, err := c.service.Use(ctx, alias)
+	if err != nil {
+		return nil, status.Error(codes.NotFound, err.Error())
+	}
+
+	return &aliasapi.Alias{
+		Id:       usedAlias.ID,
+		Key:      usedAlias.Key,
+		Url:      usedAlias.URL.String(),
+		IsActive: usedAlias.IsActive,
+		Params: &aliasapi.AliasParams{
+			TriesLeft:   usedAlias.Params.TriesLeft,
+			IsPermanent: usedAlias.Params.IsPermanent,
+		},
 	}, nil
 }
 

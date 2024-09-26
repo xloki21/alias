@@ -33,13 +33,18 @@ service AliasAPI {
     };
   };
 
+  rpc Use(KeyRequest) returns (Alias) {
+    option (google.api.http) = {
+      get: "/{key}"
+    };
+  };
+
   rpc ProcessMessage(ProcessMessageRequest) returns (ProcessMessageResponse) {
     option (google.api.http) = {
       post: "/api/v1/process"
       body: "*"
     };
   };
-
 }
 
 message ProcessMessageRequest{

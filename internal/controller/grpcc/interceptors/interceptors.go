@@ -8,8 +8,6 @@ import (
 	"time"
 )
 
-const maxUrlListLength = 10
-
 // LoggingInterceptor prints log
 func LoggingInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 	zap.S().Infow("gRPC", zap.String("method", info.FullMethod),

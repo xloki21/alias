@@ -91,11 +91,11 @@ func (a *AliasRepository) Find(ctx context.Context, key string) (*domain.Alias, 
 		if errors.Is(result.Err(), mongo.ErrNoDocuments) {
 			return nil, domain.ErrAliasNotFound
 		}
-		return nil, result.Err()
+		return nil, domain.ErrAliasSearchEngineFailure
 	}
 	doc := new(AliasDTO)
 	if err := result.Decode(doc); err != nil {
-		return nil, err
+		return nil, domain.ErrAliasDecodeFailed
 	}
 
 	alias := &domain.Alias{
