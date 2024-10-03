@@ -105,7 +105,7 @@ func TestAlias_Create(t *testing.T) {
 	}
 }
 
-func TestAlias_FindOriginalURL(t *testing.T) {
+func TestAlias_FindAlias(t *testing.T) {
 	t.Parallel()
 	type args struct {
 		ctx context.Context
@@ -151,12 +151,11 @@ func TestAlias_FindOriginalURL(t *testing.T) {
 			t.Parallel()
 			th := NewTestHelper(t)
 			wants := tt.mockFunc(th, tt.args)
-			got, err := th.service.FindOriginalURL(tt.args.ctx, tt.args.key)
+			got, err := th.service.FindAlias(tt.args.ctx, tt.args.key)
 			assert.Equal(t, wants, got)
 			assert.ErrorIs(t, err, tt.expectErr)
 		})
 	}
-
 }
 
 func TestAlias_Use(t *testing.T) {

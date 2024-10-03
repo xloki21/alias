@@ -6,6 +6,13 @@ import (
 	"go.uber.org/zap"
 )
 
+func NewStatistics(statsRepo statsRepository, consumer eventConsumer) *Statistics {
+	return &Statistics{
+		consumer:  consumer,
+		statsRepo: statsRepo,
+	}
+}
+
 type statsRepository interface {
 	PushStats(ctx context.Context, event domain.AliasExpired) error
 }
@@ -33,7 +40,17 @@ func (s *Statistics) Process(ctx context.Context) {
 
 func (s *Statistics) processEvent(ctx context.Context, msg any) {
 	const fn = "processEvent"
-	event := msg.(domain.AliasExpired)
+	event, ok := msg.(domain.AliasExpired)
+	// todo: check type assertion
+	// todo: add domain error
+	if !ok {
+		zap.S().Errorw("service",
+			zap.String("name", s.Name()),
+			zap.String("fn", fn),
+			zap.String("error", "type assertion failed"))
+		return
+	}
+
 	zap.S().Infow("service",
 		zap.String("name", s.Name()),
 		zap.String("fn", fn),
@@ -47,12 +64,5 @@ func (s *Statistics) processEvent(ctx context.Context, msg any) {
 			zap.String("name", s.Name()),
 			zap.String("fn", fn),
 			zap.String("error", err.Error()))
-	}
-}
-
-func NewStatistics(statsRepo statsRepository, consumer eventConsumer) *Statistics {
-	return &Statistics{
-		consumer:  consumer,
-		statsRepo: statsRepo,
 	}
 }

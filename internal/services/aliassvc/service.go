@@ -14,6 +14,10 @@ const (
 	maxGoroutines = 10
 )
 
+type eventProducer interface {
+	Produce(event any)
+}
+
 type Alias struct {
 	repo         aliasRepo
 	expiredQ     eventProducer
@@ -23,6 +27,7 @@ type Alias struct {
 
 // NewAlias creates a new alias service
 func NewAlias(expiredQ eventProducer, usedQ eventProducer, repo aliasRepo, keyGenerator keyGenerator) *Alias {
+
 	return &Alias{
 		expiredQ:     expiredQ,
 		usedQ:        usedQ,
@@ -35,10 +40,6 @@ type aliasRepo interface {
 	Save(ctx context.Context, aliases []domain.Alias) error
 	Find(ctx context.Context, key string) (*domain.Alias, error)
 	Remove(ctx context.Context, key string) error
-}
-
-type eventProducer interface {
-	Produce(event any)
 }
 
 type keyGenerator interface {
@@ -129,7 +130,6 @@ func (s *Alias) Use(ctx context.Context, alias *domain.Alias) (*domain.Alias, er
 	// check if alias is expired and send event with publisher
 	if alias.Params.TriesLeft == 0 {
 		event := alias.Expired()
-
 		s.expiredQ.Produce(event)
 
 		zap.S().Infow("service",
@@ -151,13 +151,11 @@ func (s *Alias) Use(ctx context.Context, alias *domain.Alias) (*domain.Alias, er
 	event := alias.Redirected()
 
 	s.usedQ.Produce(event)
-
 	zap.S().Infow("service",
 		zap.String("name", s.Name()),
 		zap.String("fn", fn),
 		zap.String("publish", event.String()),
 	)
-
 	return alias, nil
 }
 
