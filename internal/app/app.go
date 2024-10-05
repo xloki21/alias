@@ -12,13 +12,13 @@ import (
 	"github.com/xloki21/alias/internal/controller/httpc/mw"
 	"github.com/xloki21/alias/internal/domain"
 	aliasapi "github.com/xloki21/alias/internal/gen/go/pbuf/alias"
-	"github.com/xloki21/alias/internal/infrastructure/squeue"
 	"github.com/xloki21/alias/internal/repository"
 	"github.com/xloki21/alias/internal/repository/inmemory"
 	"github.com/xloki21/alias/internal/repository/mongodb"
 	"github.com/xloki21/alias/internal/services/aliassvc"
 	"github.com/xloki21/alias/internal/services/managersvc"
 	"github.com/xloki21/alias/internal/services/statssvc"
+	"github.com/xloki21/alias/pkg/kafka"
 	"github.com/xloki21/alias/pkg/keygen"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -60,8 +60,14 @@ type Application struct {
 func New(cfg config.AppConfig) (*Application, error) {
 	ctx := context.Background()
 
-	aliasUsedQ := squeue.New()
-	aliasExpiredQ := squeue.New()
+	//aliasUsedQ := squeue.New()
+	//aliasExpiredQ := squeue.New()
+
+	aliasUsedQProducer := kafka.NewProducer([]string{"localhost:9092"}, "used", nil)
+	aliasUsedQConsumer := kafka.NewConsumer("used_q", "used", []string{"localhost:9092"}, nil)
+
+	aliasExpiredQProducer := kafka.NewProducer([]string{"localhost:9092"}, "expired", nil)
+	aliasExpiredQConsumer := kafka.NewConsumer("expired_q", "expired", []string{"localhost:9092"}, nil)
 
 	var managerService *managersvc.Manager
 	var statsService *statssvc.Statistics
@@ -106,16 +112,16 @@ func New(cfg config.AppConfig) (*Application, error) {
 
 		aliasRepo := mongodb.NewAliasRepository(db.Collection(mongodb.AliasCollectionName))
 		statsRepo := mongodb.NewStatisticsRepository(db.Collection(mongodb.StatsCollectionName))
-		managerService = managersvc.NewManager(aliasRepo, aliasUsedQ)
-		statsService = statssvc.NewStatistics(statsRepo, aliasExpiredQ)
-		aliasService = aliassvc.NewAlias(aliasExpiredQ, aliasUsedQ, aliasRepo, keyGen)
+		managerService = managersvc.NewManager(aliasRepo, aliasUsedQConsumer)
+		statsService = statssvc.NewStatistics(statsRepo, aliasExpiredQConsumer)
+		aliasService = aliassvc.NewAlias(aliasExpiredQProducer, aliasUsedQProducer, aliasRepo, keyGen)
 
 	case repository.InMemory:
 		aliasRepo := inmemory.NewAliasRepository()
 		statsRepo := inmemory.NewStatisticsRepository()
-		managerService = managersvc.NewManager(aliasRepo, aliasUsedQ)
-		statsService = statssvc.NewStatistics(statsRepo, aliasExpiredQ)
-		aliasService = aliassvc.NewAlias(aliasExpiredQ, aliasUsedQ, aliasRepo, keyGen)
+		managerService = managersvc.NewManager(aliasRepo, aliasUsedQConsumer)
+		statsService = statssvc.NewStatistics(statsRepo, aliasExpiredQConsumer)
+		aliasService = aliassvc.NewAlias(aliasExpiredQProducer, aliasUsedQProducer, aliasRepo, keyGen)
 
 	default:
 		zap.S().Fatalf("unknown storage type: %s", cfg.Storage.Type)

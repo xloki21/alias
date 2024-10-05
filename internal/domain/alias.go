@@ -34,17 +34,19 @@ func (a Alias) Type() string {
 }
 
 // Redirected is a function that creates an AliasLinkRedirected event.
-func (a Alias) Redirected() AliasUsed {
-	return AliasUsed{
+func (a Alias) Redirected() Event {
+	return Event{
 		Alias:      a,
 		OccurredAt: time.Now(),
+		eventType:  aliasUsedEventType,
 	}
 }
 
 // Expired is a function that creates an URLExpired event.
-func (a Alias) Expired() AliasExpired {
-	return AliasExpired{
+func (a Alias) Expired() Event {
+	return Event{
 		Alias:      a,
 		OccurredAt: time.Now(),
+		eventType:  aliasExpiredEventType,
 	}
 }

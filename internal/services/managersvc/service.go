@@ -2,8 +2,12 @@ package managersvc
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	kafkago "github.com/segmentio/kafka-go"
 	"github.com/xloki21/alias/internal/domain"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 )
 
 type aliasRepository interface {
@@ -11,7 +15,8 @@ type aliasRepository interface {
 }
 
 type eventConsumer interface {
-	Consume() chan any
+	Consume(ctx context.Context, fn func(context.Context, any) error) error
+	Close()
 }
 
 type Manager struct {
@@ -31,16 +36,47 @@ func (m *Manager) Name() string {
 }
 
 func (m *Manager) Process(ctx context.Context) {
-	go func() {
-		for event := range m.consumer.Consume() {
-			m.processEvent(ctx, event)
+	eg, ctx := errgroup.WithContext(ctx)
+
+	eg.Go(func() error {
+		for {
+			select {
+			case <-ctx.Done():
+				m.consumer.Close()
+				return ctx.Err()
+			default:
+				err := m.consumer.Consume(ctx, m.consumerFn)
+				if err != nil {
+					return err
+				}
+			}
 		}
-	}()
+	})
 }
 
-func (m *Manager) processEvent(ctx context.Context, msg any) {
-	const fn = "processEvent"
-	event := msg.(domain.AliasUsed)
+func (m *Manager) consumerFn(ctx context.Context, msg any) error {
+	const fn = "consumerFn"
+
+	event := new(domain.Event)
+	switch msg.(type) {
+	case domain.Event:
+		received, ok := msg.(domain.Event)
+		if !ok {
+			return errors.New("type assertion error")
+		}
+		event = &received
+
+	case kafkago.Message:
+		message, ok := msg.(kafkago.Message)
+		if !ok {
+			return errors.New("type assertion error")
+		}
+
+		if err := json.Unmarshal(message.Value, event); err != nil {
+			return err
+		}
+	}
+
 	zap.S().Infow("service",
 		zap.String("name", m.Name()),
 		zap.String("fn", fn),
@@ -49,12 +85,14 @@ func (m *Manager) processEvent(ctx context.Context, msg any) {
 	)
 
 	if !event.Params.IsPermanent {
-		if err := m.aliasRepo.DecreaseTTLCounter(ctx, event.Alias.Key); err != nil {
+		if err := m.aliasRepo.DecreaseTTLCounter(ctx, event.Key); err != nil {
 			zap.S().Errorw("service",
 				zap.String("name", m.Name()),
 				zap.String("fn", fn),
 				zap.String("error", err.Error()))
+			return err
 		}
 	}
+	return nil
 
 }

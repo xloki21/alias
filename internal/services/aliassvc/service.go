@@ -15,7 +15,8 @@ const (
 )
 
 type eventProducer interface {
-	Produce(event any)
+	WriteMessage(ctx context.Context, msg any) error
+	Close()
 }
 
 type Alias struct {
@@ -130,7 +131,9 @@ func (s *Alias) Use(ctx context.Context, alias *domain.Alias) (*domain.Alias, er
 	// check if alias is expired and send event with publisher
 	if alias.Params.TriesLeft == 0 {
 		event := alias.Expired()
-		s.expiredQ.Produce(event)
+		if err := s.expiredQ.WriteMessage(ctx, event); err != nil {
+			return nil, err
+		}
 
 		zap.S().Infow("service",
 			zap.String("name", s.Name()),
@@ -150,7 +153,10 @@ func (s *Alias) Use(ctx context.Context, alias *domain.Alias) (*domain.Alias, er
 	// publish event
 	event := alias.Redirected()
 
-	s.usedQ.Produce(event)
+	if err := s.usedQ.WriteMessage(ctx, event); err != nil {
+		return nil, err
+	}
+
 	zap.S().Infow("service",
 		zap.String("name", s.Name()),
 		zap.String("fn", fn),

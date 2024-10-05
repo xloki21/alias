@@ -25,7 +25,7 @@ type aliasService interface {
 type requestURLList struct {
 	URLs []struct {
 		Url           string `json:"url"`
-		MaxUsageCount uint64 `json:"maxUsageCount"`
+		MaxUsageCount uint64 `json:"maxUsageCount,omitempty"`
 	} `json:"urls"`
 }
 

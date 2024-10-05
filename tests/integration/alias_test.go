@@ -24,7 +24,6 @@ func TestAlias_Create_MongoDB(t *testing.T) {
 	}(container, ctx)
 
 	aliasService := tests.NewTestAliasService(ctx, db)
-
 	type args struct {
 		ctx      context.Context
 		requests []domain.CreateRequest
@@ -50,7 +49,7 @@ func TestAlias_Create_MongoDB(t *testing.T) {
 	}
 }
 
-func TestAlias_FindOriginalURL_MongoDB(t *testing.T) {
+func TestAlias_FindAlias_MongoDB(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
@@ -79,13 +78,13 @@ func TestAlias_FindOriginalURL_MongoDB(t *testing.T) {
 		expectErr error
 	}{
 		{
-			name:      "original url found successfully",
+			name:      "alias found successfully",
 			args:      args{ctx: context.Background(), key: testData[0].Key},
 			wants:     &testData[0],
 			expectErr: nil,
 		},
 		{
-			name:      "original url not found",
+			name:      "alias not found",
 			args:      args{ctx: context.Background(), key: "lookup-key"},
 			wants:     nil,
 			expectErr: domain.ErrAliasNotFound,
@@ -94,7 +93,7 @@ func TestAlias_FindOriginalURL_MongoDB(t *testing.T) {
 
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
-			got, err := aliasService.FindOriginalURL(ctx, testCase.args.key)
+			got, err := aliasService.FindAlias(ctx, testCase.args.key)
 			assert.ErrorIs(t, err, testCase.expectErr)
 			if testCase.wants != nil {
 				assert.Equal(t, testCase.wants.URL, got.URL)

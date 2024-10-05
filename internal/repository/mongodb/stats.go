@@ -31,7 +31,7 @@ func (r *StatisticsRepository) Name() string {
 }
 
 // PushStats pushes data with statistics into collection
-func (r *StatisticsRepository) PushStats(ctx context.Context, event domain.AliasExpired) error {
+func (r *StatisticsRepository) PushStats(ctx context.Context, event domain.Event) error {
 	const fn = "PushEvent"
 	zap.S().Infow("repo",
 		zap.String("name", r.Name()),

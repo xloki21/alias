@@ -181,7 +181,7 @@ func TestAlias_Use(t *testing.T) {
 			name: "use expired alias",
 			args: args{ctx: context.Background(), alias: &testData[0]},
 			mockFunc: func(th *TestHelper, args args) *domain.Alias {
-				th.expiredQ.On("Produce", mock.AnythingOfType("AliasExpired"))
+				th.expiredQ.On("WriteMessage", context.Background(), mock.AnythingOfType("AliasExpired")).Return(nil)
 				return nil
 			},
 			expectErr: domain.ErrAliasExpired,
@@ -190,7 +190,7 @@ func TestAlias_Use(t *testing.T) {
 			name: "use valid alias with ttl successfully",
 			args: args{ctx: context.Background(), alias: &testData[1]},
 			mockFunc: func(th *TestHelper, args args) *domain.Alias {
-				th.usedQ.On("Produce", mock.AnythingOfType("AliasUsed"))
+				th.usedQ.On("WriteMessage", context.Background(), mock.AnythingOfType("AliasUsed")).Return(nil)
 				return args.alias
 			},
 		},
