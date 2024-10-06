@@ -1,6 +1,7 @@
 package client
 
 import (
+	"fmt"
 	aliasapi "github.com/xloki21/alias/internal/gen/go/pbuf/alias"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -16,7 +17,7 @@ func New(target string) (*Client, error) {
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("could not create client: %w", err)
 	}
 	return &Client{Api: aliasapi.NewAliasAPIClient(cc)}, nil
 }

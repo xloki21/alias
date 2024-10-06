@@ -9,6 +9,8 @@ import (
 	"time"
 )
 
+const StatsCollectionName = "stats"
+
 type eventDocument struct {
 	OccurredAt time.Time `bson:"occurred_at"` // time when event occurred
 	Key        string    `bson:"key"`
@@ -31,7 +33,7 @@ func (r *StatisticsRepository) Name() string {
 }
 
 // PushStats pushes data with statistics into collection
-func (r *StatisticsRepository) PushStats(ctx context.Context, event domain.AliasExpired) error {
+func (r *StatisticsRepository) PushStats(ctx context.Context, event domain.Event) error {
 	const fn = "PushEvent"
 	zap.S().Infow("repo",
 		zap.String("name", r.Name()),
