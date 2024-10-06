@@ -9,6 +9,8 @@ import (
 	"time"
 )
 
+const StatsCollectionName = "stats"
+
 type eventDocument struct {
 	OccurredAt time.Time `bson:"occurred_at"` // time when event occurred
 	Key        string    `bson:"key"`

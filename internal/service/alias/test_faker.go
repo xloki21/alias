@@ -1,4 +1,4 @@
-package aliassvc
+package alias
 
 import (
 	"fmt"

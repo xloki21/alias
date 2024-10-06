@@ -3,6 +3,7 @@ package kafka
 import (
 	"context"
 	kafkago "github.com/segmentio/kafka-go"
+	"go.uber.org/zap"
 	"log"
 	"time"
 )
@@ -26,8 +27,13 @@ func NewConsumer(groupID, topic string, brokers []string, startOffset *int64) Co
 		MinBytes:    10e3, // 10KB
 		MaxBytes:    10e6, // 10MB
 		StartOffset: *startOffset,
-		MaxWait:     10 * time.Millisecond, // сколько мы готовы ждать сообщений в одной итерации
+		MaxWait:     10 * time.Millisecond,
 	})
+
+	zap.S().Infow("core",
+		zap.String("state", "created Kafka consumer"),
+		zap.String("topic", topic))
+
 	return &consumer{
 		Reader: reader,
 		topic:  topic,

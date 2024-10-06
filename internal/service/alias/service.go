@@ -1,5 +1,5 @@
 //go:generate mockery
-package aliassvc
+package alias
 
 import (
 	"context"

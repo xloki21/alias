@@ -1,16 +1,14 @@
 package config
 
 import (
-	"errors"
 	"fmt"
+	"github.com/spf13/viper"
+	"github.com/xloki21/alias/internal/config/base"
+	"github.com/xloki21/alias/internal/repository"
+	"github.com/xloki21/alias/pkg/logger"
+	"go.uber.org/zap"
 	"log"
 	"os"
-	"time"
-
-	"github.com/spf13/viper"
-	"github.com/xloki21/alias/internal/repository"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 )
 
 type Service struct {
@@ -20,75 +18,40 @@ type Service struct {
 	BaseURL     string `mapstructure:"base-url"`
 }
 
-type LoggerConfig struct {
-	Level    string `mapstructure:"level"`
-	Encoding string `mapstructure:"encoding"`
-}
-
-type Credentials struct {
-	AuthSource string
-	User       string
-	Password   string
-}
-
-type MongoDBStorageConfig struct {
-	URI         string `mapstructure:"uri"`
-	Credentials Credentials
-	Database    string `mapstructure:"database"`
-}
-
-type StorageConfig struct {
-	Type    repository.Type       `yaml:"type"` // mongodb/postgres/inmemory
-	MongoDB *MongoDBStorageConfig `mapstructure:"config" yaml:"config"`
-}
-
 type AppConfig struct {
-	Service      Service       `mapstructure:"service"`
-	Storage      StorageConfig `mapstructure:"storage"`
-	LoggerConfig LoggerConfig  `mapstructure:"logger"`
+	Service      *Service              `mapstructure:"service"`
+	Storage      *base.StorageConfig   `mapstructure:"storage"`
+	LoggerConfig *base.LoggerConfig    `mapstructure:"logger"`
+	Producers    []base.ProducerConfig `mapstructure:"producers"`
+	Consumers    []base.ConsumerConfig `mapstructure:"consumers"`
 }
 
-func NewZapLogger(cfg LoggerConfig) (*zap.Logger, error) {
-	zcfg := zap.NewProductionConfig()
-	zcfg.EncoderConfig = zap.NewProductionEncoderConfig()
-	zcfg.EncoderConfig.CallerKey = zapcore.OmitKey
-	zcfg.EncoderConfig.EncodeTime = zapcore.TimeEncoderOfLayout(time.DateTime)
-	zcfg.OutputPaths = []string{"stdout"}
-	zcfg.Encoding = cfg.Encoding
-
-	parsedLevel, err := zapcore.ParseLevel(cfg.Level)
-	if err != nil {
-		return nil, err
+func (c AppConfig) GetProducerConfig(name string) *base.ProducerConfig {
+	for _, p := range c.Producers {
+		if p.Name == name {
+			return &p
+		}
 	}
+	return nil
+}
 
-	zcfg.Level = zap.NewAtomicLevelAt(parsedLevel)
-
-	return zcfg.Build()
+func (c AppConfig) GetConsumerConfig(name string) *base.ConsumerConfig {
+	for _, c := range c.Consumers {
+		if c.Name == name {
+			return &c
+		}
+	}
+	return nil
 }
 
 func Load() (AppConfig, error) {
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
-	viper.AddConfigPath("/etc/alias/")
-	viper.AddConfigPath("$HOME/.alias")
-	viper.AddConfigPath("./config")
+	viper.AddConfigPath("/etc/app/")
+	viper.AddConfigPath("./config") // TODO: fixit
 	viper.AddConfigPath(".")
-
 	if err := viper.ReadInConfig(); err != nil {
-		fmt.Printf("no config file found, using defaults\n")
-		var configFileNotFoundError viper.ConfigFileNotFoundError
-		if errors.As(err, &configFileNotFoundError) {
-			viper.SetDefault("service.http", "localhost:8080")
-			viper.SetDefault("service.grpc", "localhost:8081")
-			viper.SetDefault("service.grpc-gateway", "localhost:8082")
-			viper.SetDefault("service.base-url", "http://localhost:8080")
-			viper.SetDefault("storage.type", repository.InMemory)
-			viper.SetDefault("logger.level", "info")
-			viper.SetDefault("logger.encoding", "json")
-
-		} else {
-			return AppConfig{}, err
-		}
+		log.Fatal("failed to read application config file")
 	}
 
 	cfg := AppConfig{}
@@ -96,7 +59,7 @@ func Load() (AppConfig, error) {
 		return AppConfig{}, err
 	}
 
-	logger, err := NewZapLogger(cfg.LoggerConfig)
+	logger, err := logger.NewZapLogger(cfg.LoggerConfig)
 	if err != nil {
 		log.Fatal("failed to init logger: " + err.Error())
 	}
@@ -115,7 +78,7 @@ func Load() (AppConfig, error) {
 				return AppConfig{}, fmt.Errorf("missing environment variable %s", requiredEnvVar)
 			}
 		}
-		cfg.Storage.MongoDB.Credentials = Credentials{
+		cfg.Storage.MongoDB.Credentials = base.Credentials{
 			User:       os.Getenv("MONGO_USERNAME"),
 			Password:   os.Getenv("MONGO_PASSWORD"),
 			AuthSource: os.Getenv("MONGO_AUTHSOURCE"),

@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	kafkago "github.com/segmentio/kafka-go"
+	"go.uber.org/zap"
 	"log"
 )
 
@@ -35,7 +36,9 @@ func NewProducer(brokers []string, topic string, tlsCfg *tls.Config) Producer {
 		}
 	}
 
-	log.Printf("Created Kafka producer for topic %s", topic)
+	zap.S().Infow("core",
+		zap.String("state", "created Kafka producer"),
+		zap.String("topic", topic))
 
 	return &producer{
 		writer: writer,

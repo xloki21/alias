@@ -1,4 +1,4 @@
-package statssvc
+package manager
 
 import (
 	"context"
@@ -10,15 +10,8 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func NewStatistics(statsRepo statsRepository, consumer eventConsumer) *Statistics {
-	return &Statistics{
-		consumer:  consumer,
-		statsRepo: statsRepo,
-	}
-}
-
-type statsRepository interface {
-	PushStats(ctx context.Context, event domain.Event) error
+type aliasRepository interface {
+	DecreaseTTLCounter(ctx context.Context, key string) error
 }
 
 type eventConsumer interface {
@@ -26,26 +19,33 @@ type eventConsumer interface {
 	Close()
 }
 
-type Statistics struct {
+type Manager struct {
 	consumer  eventConsumer
-	statsRepo statsRepository
+	aliasRepo aliasRepository
 }
 
-func (s *Statistics) Name() string {
-	return "Statistics"
+func NewManager(aliasRepo aliasRepository, consumer eventConsumer) *Manager {
+	return &Manager{
+		consumer:  consumer,
+		aliasRepo: aliasRepo,
+	}
 }
 
-func (s *Statistics) Process(ctx context.Context) {
+func (m *Manager) Name() string {
+	return "Manager"
+}
+
+func (m *Manager) Process(ctx context.Context) {
 	eg, ctx := errgroup.WithContext(ctx)
 
 	eg.Go(func() error {
 		for {
 			select {
 			case <-ctx.Done():
-				s.consumer.Close()
+				m.consumer.Close()
 				return ctx.Err()
 			default:
-				err := s.consumer.Consume(ctx, s.consumerFn)
+				err := m.consumer.Consume(ctx, m.consumerFn)
 				if err != nil {
 					return err
 				}
@@ -54,7 +54,7 @@ func (s *Statistics) Process(ctx context.Context) {
 	})
 }
 
-func (s *Statistics) consumerFn(ctx context.Context, msg any) error {
+func (m *Manager) consumerFn(ctx context.Context, msg any) error {
 	const fn = "consumerFn"
 
 	event := new(domain.Event)
@@ -78,19 +78,21 @@ func (s *Statistics) consumerFn(ctx context.Context, msg any) error {
 	}
 
 	zap.S().Infow("service",
-		zap.String("name", s.Name()),
+		zap.String("name", m.Name()),
 		zap.String("fn", fn),
 		zap.String("received", event.String()),
 		zap.String("alias key", event.Key),
 	)
 
-	err := s.statsRepo.PushStats(ctx, *event)
-	if err != nil {
-		zap.S().Errorw("service",
-			zap.String("name", s.Name()),
-			zap.String("fn", fn),
-			zap.String("error", err.Error()))
-		return errors.New("failed to push stat info")
+	if !event.Params.IsPermanent {
+		if err := m.aliasRepo.DecreaseTTLCounter(ctx, event.Key); err != nil {
+			zap.S().Errorw("service",
+				zap.String("name", m.Name()),
+				zap.String("fn", fn),
+				zap.String("error", err.Error()))
+			return err
+		}
 	}
 	return nil
+
 }

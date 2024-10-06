@@ -5,16 +5,16 @@ import (
 )
 
 const (
-	aliasExpiredEventType = "alias expired"
-	aliasUsedEventType    = "alias used"
+	aliasExpired = "alias expired"
+	aliasUsed    = "alias used"
 )
 
 type Event struct {
 	Alias
-	eventType  string
+	EventType  string
 	OccurredAt time.Time
 }
 
 func (e Event) String() string {
-	return e.eventType
+	return e.EventType
 }

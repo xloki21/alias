@@ -2,17 +2,15 @@ package main
 
 import (
 	"context"
-	"github.com/xloki21/alias/internal/app/alias"
+	"github.com/joho/godotenv"
+	"github.com/xloki21/alias/internal/app/stats"
 	"github.com/xloki21/alias/internal/config"
+	"go.uber.org/zap"
 	"log"
 	"os"
-
-	"github.com/joho/godotenv"
-	"go.uber.org/zap"
 )
 
 func main() {
-
 	if _, err := os.Stat(".env"); err == nil {
 		err := godotenv.Load()
 		if err != nil {
@@ -26,7 +24,7 @@ func main() {
 	}
 	zap.S().Infow("core", zap.String("state", "application config loaded"))
 
-	application, err := alias.New(cfg)
+	application, err := stats.New(cfg)
 	if err != nil {
 		zap.S().Fatal("failed to start application", zap.Error(err))
 	}
@@ -34,4 +32,5 @@ func main() {
 	if err := application.Run(context.Background()); err != nil {
 		zap.S().Fatal("failed to start application", zap.Error(err))
 	}
+
 }

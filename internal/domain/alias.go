@@ -38,7 +38,7 @@ func (a Alias) Redirected() Event {
 	return Event{
 		Alias:      a,
 		OccurredAt: time.Now(),
-		eventType:  aliasUsedEventType,
+		EventType:  aliasUsed,
 	}
 }
 
@@ -47,6 +47,6 @@ func (a Alias) Expired() Event {
 	return Event{
 		Alias:      a,
 		OccurredAt: time.Now(),
-		eventType:  aliasExpiredEventType,
+		EventType:  aliasExpired,
 	}
 }

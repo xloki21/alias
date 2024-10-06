@@ -1,4 +1,4 @@
-package aliassvc
+package alias
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/xloki21/alias/internal/domain"
-	"github.com/xloki21/alias/internal/services/aliassvc/mocks"
+	"github.com/xloki21/alias/internal/service/alias/mocks"
 	"net/url"
 	"testing"
 )

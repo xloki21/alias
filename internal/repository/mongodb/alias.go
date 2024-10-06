@@ -13,10 +13,7 @@ import (
 	"net/url"
 )
 
-const (
-	AliasCollectionName = "aliases"
-	StatsCollectionName = "stats"
-)
+const AliasCollectionName = "aliases"
 
 // AliasDTO is DTO for AliasCollectionName collection
 type AliasDTO struct {

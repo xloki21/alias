@@ -10,8 +10,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
-	"github.com/xloki21/alias/internal/app"
+	"github.com/xloki21/alias/internal/app/alias"
 	"github.com/xloki21/alias/internal/config"
+	aliasapp2 "github.com/xloki21/alias/internal/config/aliascfg"
 	"github.com/xloki21/alias/internal/repository"
 	"github.com/xloki21/alias/tests"
 	"io"
@@ -30,13 +31,13 @@ var testCfg = config.AppConfig{
 		GRPCGateway: "localhost:8082",
 		BaseURL:     "http://localhost:8080",
 	},
-	Storage: config.StorageConfig{
+	Storage: aliasapp2.StorageConfig{
 		Type: repository.MongoDB,
-		MongoDB: &config.MongoDBStorageConfig{
+		MongoDB: &aliasapp2.MongoDBStorageConfig{
 			Database: "aliases",
 		},
 	},
-	LoggerConfig: config.LoggerConfig{
+	LoggerConfig: aliasapp2.LoggerConfig{
 		Level:    "info",
 		Encoding: "console",
 	},
@@ -61,7 +62,7 @@ func TestApi_e2e(t *testing.T) {
 
 	testCfg.Storage.MongoDB.URI = connstr
 
-	application, err := app.New(testCfg)
+	application, err := alias.New(testCfg)
 	assert.NoError(t, err)
 
 	go application.Run(ctx)
