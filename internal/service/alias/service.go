@@ -136,11 +136,11 @@ func (s *Alias) Use(ctx context.Context, alias *domain.Alias) error {
 
 		msg, err := kafker.MessageFromProto(event.AsProto())
 		if err != nil {
-			return err // todo: fix
+			return domain.ErrInternal
 		}
 
 		if err := s.expiredQ.WriteMessage(ctx, *msg); err != nil {
-			return err // todo: fix
+			return domain.ErrProducerGeneralFailure
 		}
 
 		zap.S().Infow("service",
@@ -162,7 +162,7 @@ func (s *Alias) Use(ctx context.Context, alias *domain.Alias) error {
 	event := alias.Redirected()
 	msg, err := kafker.MessageFromProto(event.AsProto())
 	if err != nil {
-		return err // todo: fix
+		return domain.ErrInternal
 	}
 
 	if err := s.usedQ.WriteMessage(ctx, *msg); err != nil {

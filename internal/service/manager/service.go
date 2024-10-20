@@ -5,9 +5,9 @@ import (
 	"github.com/segmentio/kafka-go"
 	"github.com/xloki21/alias/internal/domain"
 	"github.com/xloki21/alias/internal/gen/go/pbuf/aliasapi"
+	"github.com/xloki21/alias/pkg/kafker"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
-	"google.golang.org/protobuf/proto"
 )
 
 type aliasRepository interface {
@@ -54,19 +54,28 @@ func (m *Manager) Process(ctx context.Context) {
 	})
 }
 
-func (m *Manager) consumerFn(ctx context.Context, msg any) error {
+func (m *Manager) consumerFn(ctx context.Context, received any) error {
 	const fn = "consumerFn"
 
-	message := msg.(kafka.Message)
-	newEvt := new(aliasapi.Event)
-	err := proto.Unmarshal(message.Value, newEvt)
-	if err != nil {
-		return err // todo: fix
-	}
+	event := new(domain.Event)
 
-	event, err := domain.NewEventFromProto(newEvt)
-	if err != nil {
-		return err // todo: fix
+	switch received.(type) {
+	case kafka.Message:
+		raw := received.(kafka.Message)
+		message := kafker.NewFromRaw(raw)
+		protoEvent := new(aliasapi.Event)
+
+		err := message.AsProto(protoEvent)
+		if err != nil {
+			return domain.ErrInternal
+		}
+
+		event, err = domain.NewEventFromProto(protoEvent)
+		if err != nil {
+			return domain.ErrInternal
+		}
+	default:
+		return domain.ErrUnknownBrokerMessageType
 	}
 
 	zap.S().Infow("service",
