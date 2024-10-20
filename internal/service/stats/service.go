@@ -2,12 +2,13 @@ package stats
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	kafkago "github.com/segmentio/kafka-go"
+	"github.com/segmentio/kafka-go"
 	"github.com/xloki21/alias/internal/domain"
+	"github.com/xloki21/alias/internal/gen/go/pbuf/aliasapi"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/protobuf/proto"
 )
 
 func NewStatistics(statsRepo statsRepository, consumer eventConsumer) *Statistics {
@@ -56,25 +57,16 @@ func (s *Statistics) Process(ctx context.Context) {
 
 func (s *Statistics) consumerFn(ctx context.Context, msg any) error {
 	const fn = "consumerFn"
+	message := msg.(kafka.Message)
+	newEvt := new(aliasapi.Event)
+	err := proto.Unmarshal(message.Value, newEvt)
+	if err != nil {
+		return err // todo: fix
+	}
 
-	event := new(domain.Event)
-	switch msg.(type) {
-	case domain.Event:
-		received, ok := msg.(domain.Event)
-		if !ok {
-			return errors.New("type assertion error")
-		}
-		event = &received
-
-	case kafkago.Message:
-		message, ok := msg.(kafkago.Message)
-		if !ok {
-			return errors.New("type assertion error")
-		}
-
-		if err := json.Unmarshal(message.Value, event); err != nil {
-			return err
-		}
+	event, err := domain.NewEventFromProto(newEvt)
+	if err != nil {
+		return err // todo: fix
 	}
 
 	zap.S().Infow("service",
@@ -84,8 +76,7 @@ func (s *Statistics) consumerFn(ctx context.Context, msg any) error {
 		zap.String("alias key", event.Key),
 	)
 
-	err := s.statsRepo.PushStats(ctx, *event)
-	if err != nil {
+	if err := s.statsRepo.PushStats(ctx, *event); err != nil {
 		zap.S().Errorw("service",
 			zap.String("name", s.Name()),
 			zap.String("fn", fn),

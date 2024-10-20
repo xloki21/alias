@@ -8,7 +8,7 @@ import (
 	"github.com/xloki21/alias/internal/repository/inmemory"
 	"github.com/xloki21/alias/internal/repository/mongodb"
 	"github.com/xloki21/alias/internal/service/stats"
-	"github.com/xloki21/alias/pkg/kafka"
+	"github.com/xloki21/alias/pkg/kafker"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.uber.org/zap"
@@ -30,7 +30,7 @@ func New(cfg config.AppConfig) (*Application, error) {
 	ctx := context.Background()
 
 	consumerCfg := cfg.GetConsumerConfig("Alias Expired Event Consumer")
-	consumer := kafka.NewConsumer(consumerCfg.GroupID, consumerCfg.Topic, consumerCfg.GetBrokersURI(), nil)
+	consumer := kafker.NewConsumer(consumerCfg.GroupID, consumerCfg.Topic, consumerCfg.GetBrokersURI(), nil)
 
 	var statsService *stats.Statistics
 

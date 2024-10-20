@@ -12,7 +12,8 @@ import (
 const StatsCollectionName = "stats"
 
 type eventDocument struct {
-	OccurredAt time.Time `bson:"occurred_at"` // time when event occurred
+	EventID    string    `bson:"event_id"`
+	OccurredAt time.Time `bson:"occurred_at"`
 	Key        string    `bson:"key"`
 	URL        *url.URL  `bson:"url"`
 }
@@ -34,13 +35,14 @@ func (r *StatisticsRepository) Name() string {
 
 // PushStats pushes data with statistics into collection
 func (r *StatisticsRepository) PushStats(ctx context.Context, event domain.Event) error {
-	const fn = "PushEvent"
+	const fn = "PushStats"
 	zap.S().Infow("repo",
 		zap.String("name", r.Name()),
 		zap.String("fn", fn),
 		zap.String("event", event.String()),
 		zap.String("alias key", event.Key))
 	newEventDoc := eventDocument{
+		EventID:    event.EventID.String(),
 		OccurredAt: event.OccurredAt,
 		Key:        event.Key,
 		URL:        event.URL,

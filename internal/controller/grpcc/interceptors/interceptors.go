@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	"time"
 )
 
@@ -13,7 +16,7 @@ import (
 func LoggingInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 	payload, err := json.Marshal(req)
 	if err != nil {
-		return nil, err
+		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
 	zap.S().Infow("gRPC", zap.String("method", info.FullMethod),
@@ -21,11 +24,16 @@ func LoggingInterceptor(ctx context.Context, req interface{}, info *grpc.UnarySe
 	tic := time.Now()
 
 	resp, err := handler(ctx, req)
+
 	duration := time.Since(tic)
 
 	durationString := fmt.Sprintf("%dms", duration.Milliseconds())
 	if duration.Milliseconds() < 2 {
 		durationString = fmt.Sprintf("%dμs", duration.Microseconds())
+	}
+
+	if err != nil {
+		return nil, err
 	}
 
 	jsonResponse, err := json.Marshal(resp)

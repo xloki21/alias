@@ -1,4 +1,4 @@
-package kafka
+package kafker
 
 import (
 	"context"
@@ -46,16 +46,16 @@ type consumer struct {
 }
 
 func (c *consumer) Consume(ctx context.Context, fn func(context.Context, any) error) error {
-	msg, err := c.Reader.ReadMessage(ctx)
+	message, err := c.Reader.ReadMessage(ctx)
 	if err != nil {
 		return err
 	}
 
-	if err := fn(ctx, msg); err != nil {
+	if err := fn(ctx, message); err != nil {
 		return err
 	}
 	// Коммит сообщения после успешной обработки
-	if err := c.Reader.CommitMessages(ctx, msg); err != nil {
+	if err := c.Reader.CommitMessages(ctx, message); err != nil {
 		return err
 	}
 

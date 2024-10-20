@@ -159,24 +159,24 @@ tasks:
       -
       - mkdir -p internal/gen/go
       - |
-        protoc --proto_path=internal/api/ \
+        protoc --proto_path=api/alias/ \
                --proto_path=vendor-proto/protovalidate/proto/protovalidate \
                --proto_path=vendor-proto/googleapis \
                --proto_path=vendor-proto/grpc-gateway \
                --go_out=internal/gen/go \
                --go-grpc_out=internal/gen/go \
                --grpc-gateway_out=internal/gen/go \
-               internal/api/api.proto
+               api/alias/service.proto
       - echo "Generating OpenAPI (Swagger) definitions with openapiv2"
       - mkdir -p internal/gen/swagger
       - |
-        protoc --proto_path=internal/api/ \
+        protoc --proto_path=api/alias \
                --proto_path=vendor-proto/protovalidate/proto/protovalidate \
                --proto_path=vendor-proto/googleapis \
                --proto_path=vendor-proto/grpc-gateway \
                --openapiv2_out=internal/gen/swagger \
                --openapiv2_opt=logtostderr=true,allow_merge=true,merge_file_name=alias \
-               internal/api/api.proto
+               api/alias/service.proto
     deps:
       - grpc-ensure-protoc
       - grpc-ensure-plugins

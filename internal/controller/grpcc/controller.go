@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"github.com/bufbuild/protovalidate-go"
 	"github.com/xloki21/alias/internal/domain"
-	aliasapi "github.com/xloki21/alias/internal/gen/go/pbuf/alias"
+	"github.com/xloki21/alias/internal/gen/go/pbuf/aliasapi"
 	"github.com/xloki21/alias/pkg/urlparser"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -20,7 +20,7 @@ var _ aliasapi.AliasAPIServer = (*Controller)(nil)
 type aliasService interface {
 	Create(ctx context.Context, requests []domain.CreateRequest) ([]domain.Alias, error)
 	FindAlias(ctx context.Context, key string) (*domain.Alias, error)
-	Use(ctx context.Context, alias *domain.Alias) (*domain.Alias, error)
+	Use(ctx context.Context, alias *domain.Alias) error
 	Remove(ctx context.Context, key string) error
 }
 
@@ -104,7 +104,7 @@ func (c *Controller) FindAlias(ctx context.Context, data *aliasapi.KeyRequest) (
 
 	alias, err := c.service.FindAlias(ctx, data.Key)
 	if err != nil {
-		return nil, status.Error(codes.NotFound, err.Error())
+		return nil, err
 	}
 	return &aliasapi.Alias{
 		Id:       alias.ID,
@@ -137,12 +137,11 @@ func (c *Controller) FindOriginalURL(ctx context.Context, data *aliasapi.KeyRequ
 	}, nil
 }
 
-func (c *Controller) Use(ctx context.Context, data *aliasapi.KeyRequest) (*aliasapi.Alias, error) {
+func (c *Controller) Use(ctx context.Context, data *aliasapi.KeyRequest) (*emptypb.Empty, error) {
 	checker, err := protovalidate.New()
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-
 	if err := checker.Validate(data); err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
@@ -155,21 +154,11 @@ func (c *Controller) Use(ctx context.Context, data *aliasapi.KeyRequest) (*alias
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
-	usedAlias, err := c.service.Use(ctx, alias)
-	if err != nil {
+	if err := c.service.Use(ctx, alias); err != nil {
 		return nil, status.Error(codes.NotFound, err.Error())
 	}
 
-	return &aliasapi.Alias{
-		Id:       usedAlias.ID,
-		Key:      usedAlias.Key,
-		Url:      usedAlias.URL.String(),
-		IsActive: usedAlias.IsActive,
-		Params: &aliasapi.AliasParams{
-			TriesLeft:   usedAlias.Params.TriesLeft,
-			IsPermanent: usedAlias.Params.IsPermanent,
-		},
-	}, nil
+	return nil, nil
 }
 
 func (c *Controller) ProcessMessage(ctx context.Context, data *aliasapi.ProcessMessageRequest) (*aliasapi.ProcessMessageResponse, error) {

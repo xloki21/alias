@@ -2,12 +2,12 @@ package manager
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
-	kafkago "github.com/segmentio/kafka-go"
+	"github.com/segmentio/kafka-go"
 	"github.com/xloki21/alias/internal/domain"
+	"github.com/xloki21/alias/internal/gen/go/pbuf/aliasapi"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/protobuf/proto"
 )
 
 type aliasRepository interface {
@@ -57,24 +57,16 @@ func (m *Manager) Process(ctx context.Context) {
 func (m *Manager) consumerFn(ctx context.Context, msg any) error {
 	const fn = "consumerFn"
 
-	event := new(domain.Event)
-	switch msg.(type) {
-	case domain.Event:
-		received, ok := msg.(domain.Event)
-		if !ok {
-			return errors.New("type assertion error")
-		}
-		event = &received
+	message := msg.(kafka.Message)
+	newEvt := new(aliasapi.Event)
+	err := proto.Unmarshal(message.Value, newEvt)
+	if err != nil {
+		return err // todo: fix
+	}
 
-	case kafkago.Message:
-		message, ok := msg.(kafkago.Message)
-		if !ok {
-			return errors.New("type assertion error")
-		}
-
-		if err := json.Unmarshal(message.Value, event); err != nil {
-			return err
-		}
+	event, err := domain.NewEventFromProto(newEvt)
+	if err != nil {
+		return err // todo: fix
 	}
 
 	zap.S().Infow("service",

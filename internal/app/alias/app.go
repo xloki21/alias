@@ -11,12 +11,12 @@ import (
 	"github.com/xloki21/alias/internal/controller/httpc"
 	"github.com/xloki21/alias/internal/controller/httpc/mw"
 	"github.com/xloki21/alias/internal/domain"
-	alias2 "github.com/xloki21/alias/internal/gen/go/pbuf/alias"
+	"github.com/xloki21/alias/internal/gen/go/pbuf/aliasapi"
 	"github.com/xloki21/alias/internal/repository"
 	"github.com/xloki21/alias/internal/repository/inmemory"
 	"github.com/xloki21/alias/internal/repository/mongodb"
 	"github.com/xloki21/alias/internal/service/alias"
-	"github.com/xloki21/alias/pkg/kafka"
+	"github.com/xloki21/alias/pkg/kafker"
 	"github.com/xloki21/alias/pkg/keygen"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -61,9 +61,9 @@ func New(cfg config.AppConfig) (*Application, error) {
 	producerAliasUsedCfg := cfg.GetProducerConfig("Alias Used Event Producer")
 	producerAliasExpiredCfg := cfg.GetProducerConfig("Alias Expired Event Producer")
 
-	producerAliasUsed := kafka.NewProducer(producerAliasUsedCfg.GetBrokersURI(), producerAliasUsedCfg.Topic, nil)
+	producerAliasUsed := kafker.NewProducer(producerAliasUsedCfg.GetBrokersURI(), producerAliasUsedCfg.Topic, nil)
 
-	producerAliasExpired := kafka.NewProducer(producerAliasExpiredCfg.GetBrokersURI(), producerAliasExpiredCfg.Topic, nil)
+	producerAliasExpired := kafker.NewProducer(producerAliasExpiredCfg.GetBrokersURI(), producerAliasExpiredCfg.Topic, nil)
 	var aliasService *alias.Alias
 
 	keyGen := keygen.NewURLSafeRandomStringGenerator()
@@ -118,7 +118,7 @@ func New(cfg config.AppConfig) (*Application, error) {
 
 	grpcServer := grpc.NewServer(grpc.UnaryInterceptor(interceptors.LoggingInterceptor))
 	reflection.Register(grpcServer)
-	alias2.RegisterAliasAPIServer(grpcServer, grpcc.NewController(aliasService, cfg.Service.BaseURL))
+	aliasapi.RegisterAliasAPIServer(grpcServer, grpcc.NewController(aliasService, cfg.Service.BaseURL))
 
 	listener, err := net.Listen("tcp", cfg.Service.GRPC)
 	if err != nil {
@@ -129,7 +129,7 @@ func New(cfg config.AppConfig) (*Application, error) {
 	gwmux := runtime.NewServeMux()
 	opts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
 
-	if err := alias2.RegisterAliasAPIHandlerFromEndpoint(ctx, gwmux, cfg.Service.GRPC, opts); err != nil {
+	if err := aliasapi.RegisterAliasAPIHandlerFromEndpoint(ctx, gwmux, cfg.Service.GRPC, opts); err != nil {
 		zap.S().Fatalw("core", zap.String("application error", err.Error()))
 		return nil, err
 	}

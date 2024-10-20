@@ -18,7 +18,7 @@ const maxGoroutines = 10
 type aliasService interface {
 	Create(ctx context.Context, requests []domain.CreateRequest) ([]domain.Alias, error)
 	FindAlias(ctx context.Context, key string) (*domain.Alias, error)
-	Use(ctx context.Context, alias *domain.Alias) (*domain.Alias, error)
+	Use(ctx context.Context, alias *domain.Alias) error
 	Remove(ctx context.Context, key string) error
 }
 
@@ -140,8 +140,7 @@ func (ac *Controller) Redirect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	alias, err = ac.service.Use(r.Context(), alias)
-
+	err = ac.service.Use(r.Context(), alias)
 	if err != nil {
 		if errors.Is(err, domain.ErrAliasExpired) {
 			http.Error(w, "url expired", http.StatusGone)

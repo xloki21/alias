@@ -1,25 +1,22 @@
-package kafka
+package kafker
 
 import (
 	"context"
 	"crypto/tls"
-	"encoding/json"
 	kafkago "github.com/segmentio/kafka-go"
 	"go.uber.org/zap"
 	"log"
 )
 
 type Producer interface {
-	WriteMessage(ctx context.Context, msg any) error
+	WriteMessage(ctx context.Context, message Message) error
 	Close()
 }
 
-// producer структура для работы с Kafka
 type producer struct {
 	writer *kafkago.Writer
 }
 
-// NewProducer создает новый Kafka продьюсер с конфигурацией
 func NewProducer(brokers []string, topic string, tlsCfg *tls.Config) Producer {
 	// Конфигурация writer
 	writer := &kafkago.Writer{
@@ -29,7 +26,6 @@ func NewProducer(brokers []string, topic string, tlsCfg *tls.Config) Producer {
 			ChunkSize: 1,
 		},
 	}
-
 	if tlsCfg != nil {
 		writer.Transport = &kafkago.Transport{
 			TLS: tlsCfg,
@@ -46,20 +42,14 @@ func NewProducer(brokers []string, topic string, tlsCfg *tls.Config) Producer {
 }
 
 // WriteMessage отправляет сообщение в Kafka
-func (p *producer) WriteMessage(ctx context.Context, msg any) error {
-	content, err := json.Marshal(msg)
-	if err != nil {
-		return err
-	}
-	kmsg := kafkago.Message{
-		Value: content,
-	}
-	if err := p.writer.WriteMessages(ctx, kmsg); err != nil {
+func (p *producer) WriteMessage(ctx context.Context, message Message) error {
+
+	if err := p.writer.WriteMessages(ctx, message.Message); err != nil {
 		log.Printf("Failed to write message: %v", err)
 		return err
 	}
 
-	log.Printf("Message sent with key %s", string(kmsg.Key))
+	log.Printf("Message sent with key %s", string(message.Key))
 	return nil
 }
 

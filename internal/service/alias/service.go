@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/xloki21/alias/internal/domain"
+	"github.com/xloki21/alias/pkg/kafker"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -15,7 +16,7 @@ const (
 )
 
 type eventProducer interface {
-	WriteMessage(ctx context.Context, msg any) error
+	WriteMessage(ctx context.Context, message kafker.Message) error
 	Close()
 }
 
@@ -117,7 +118,7 @@ func (s *Alias) FindAlias(ctx context.Context, key string) (*domain.Alias, error
 	return alias, nil
 }
 
-func (s *Alias) Use(ctx context.Context, alias *domain.Alias) (*domain.Alias, error) {
+func (s *Alias) Use(ctx context.Context, alias *domain.Alias) error {
 	fn := "Use"
 	zap.S().Infow("service",
 		zap.String("name", s.Name()),
@@ -125,14 +126,21 @@ func (s *Alias) Use(ctx context.Context, alias *domain.Alias) (*domain.Alias, er
 		zap.String("key", alias.Key))
 
 	if alias.Params.IsPermanent {
-		return alias, nil
+		return nil
 	}
 
 	// check if alias is expired and send event with publisher
 	if alias.Params.TriesLeft == 0 {
 		event := alias.Expired()
-		if err := s.expiredQ.WriteMessage(ctx, event); err != nil {
-			return nil, err
+		// make proto
+
+		msg, err := kafker.MessageFromProto(event.AsProto())
+		if err != nil {
+			return err // todo: fix
+		}
+
+		if err := s.expiredQ.WriteMessage(ctx, *msg); err != nil {
+			return err // todo: fix
 		}
 
 		zap.S().Infow("service",
@@ -140,7 +148,7 @@ func (s *Alias) Use(ctx context.Context, alias *domain.Alias) (*domain.Alias, er
 			zap.String("fn", fn),
 			zap.String("published", event.String()),
 		)
-		return nil, domain.ErrAliasExpired
+		return domain.ErrAliasExpired
 	}
 
 	zap.S().Infow("service",
@@ -152,9 +160,13 @@ func (s *Alias) Use(ctx context.Context, alias *domain.Alias) (*domain.Alias, er
 
 	// publish event
 	event := alias.Redirected()
+	msg, err := kafker.MessageFromProto(event.AsProto())
+	if err != nil {
+		return err // todo: fix
+	}
 
-	if err := s.usedQ.WriteMessage(ctx, event); err != nil {
-		return nil, err
+	if err := s.usedQ.WriteMessage(ctx, *msg); err != nil {
+		return err // todo: fix
 	}
 
 	zap.S().Infow("service",
@@ -162,7 +174,7 @@ func (s *Alias) Use(ctx context.Context, alias *domain.Alias) (*domain.Alias, er
 		zap.String("fn", fn),
 		zap.String("publish", event.String()),
 	)
-	return alias, nil
+	return nil
 }
 
 // Remove removes the alias link

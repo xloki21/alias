@@ -1,11 +1,13 @@
 syntax = "proto3";
 
 package api.v1;
-option go_package = "pbuf/alias";
+option go_package = "pbuf/aliasapi";
 
 import "google/api/annotations.proto";
 import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
 import "buf/validate/validate.proto";
+
 
 service AliasAPI {
   rpc Create(CreateRequest) returns (CreateResponse) {
@@ -33,7 +35,7 @@ service AliasAPI {
     };
   };
 
-  rpc Use(KeyRequest) returns (Alias) {
+  rpc Use(KeyRequest) returns (google.protobuf.Empty) {
     option (google.api.http) = {
       get: "/{key}"
     };
@@ -92,6 +94,19 @@ message CreateRequest {
 
 message CreateResponse {
   repeated string urls = 1;
+}
+
+enum EventType {
+  EVENT_TYPE_UNSPECIFIED = 0;
+  EVENT_TYPE_USED = 1;
+  EVENT_TYPE_EXPIRED = 2;
+}
+
+message Event {
+  Alias alias = 1;
+  string event_id = 2;
+  EventType event_type = 3;
+  google.protobuf.Timestamp occurred_at = 4;
 }
 
 
