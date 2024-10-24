@@ -6,13 +6,11 @@ import (
 	"github.com/stretchr/testify/require"
 	tc "github.com/testcontainers/testcontainers-go/modules/mongodb"
 	"github.com/xloki21/alias/internal/domain"
-	"github.com/xloki21/alias/internal/infrastructure/squeue"
 	"github.com/xloki21/alias/internal/repository/mongodb"
-	"github.com/xloki21/alias/internal/services/aliassvc"
-	"github.com/xloki21/alias/internal/services/managersvc"
-	"github.com/xloki21/alias/internal/services/statssvc"
+	"github.com/xloki21/alias/internal/service/alias"
 	"github.com/xloki21/alias/migrations"
 	"github.com/xloki21/alias/pkg/keygen"
+	"github.com/xloki21/alias/pkg/squeue"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -70,7 +68,7 @@ func SetupMongoDBContainer(t *testing.T, testData []domain.Alias) (*tc.MongoDBCo
 	return mongodbContainer, db
 }
 
-func NewTestAliasService(ctx context.Context, db *mongo.Database) *aliassvc.Alias {
+func NewTestAliasService(ctx context.Context, db *mongo.Database) *alias.Alias {
 	usedQ := squeue.New()
 	expiredQ := squeue.New()
 
@@ -84,6 +82,6 @@ func NewTestAliasService(ctx context.Context, db *mongo.Database) *aliassvc.Alia
 
 	keyGen := keygen.NewURLSafeRandomStringGenerator()
 
-	aliasService := aliassvc.NewAlias(expiredQ, usedQ, aliasRepo, keyGen)
+	aliasService := alias.NewAlias(expiredQ, usedQ, aliasRepo, keyGen)
 	return aliasService
 }

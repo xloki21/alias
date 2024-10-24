@@ -1,0 +1,112 @@
+syntax = "proto3";
+
+package api.v1;
+option go_package = "pbuf/aliasapi";
+
+import "google/api/annotations.proto";
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+import "buf/validate/validate.proto";
+
+
+service AliasAPI {
+  rpc Create(CreateRequest) returns (CreateResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/alias"
+      body: "*"
+    };
+  };
+
+  rpc Remove(KeyRequest) returns (google.protobuf.Empty){
+    option (google.api.http) = {
+      delete: "/api/v1/alias/{key}"
+    };
+  };
+
+  rpc FindAlias(KeyRequest) returns (Alias) {
+    option (google.api.http) = {
+      get: "/api/v1/alias/{key}"
+    };
+  };
+
+  rpc FindOriginalURL(KeyRequest) returns (SingleURL) {
+    option (google.api.http) = {
+      get: "/api/v1/alias/{key}/url"
+    };
+  };
+
+  rpc Use(KeyRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      get: "/{key}"
+    };
+  };
+
+  rpc ProcessMessage(ProcessMessageRequest) returns (ProcessMessageResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/process"
+      body: "*"
+    };
+  };
+}
+
+message ProcessMessageRequest{
+  string message = 1;
+}
+
+message ProcessMessageResponse {
+  string message = 1 ;
+}
+
+message SingleURL {
+  string url = 1 [(buf.validate.field).cel = {
+    id: "valid_url"
+    message: "url must be a valid URL"
+    expression: "this.isUri()"
+  }];
+  optional uint64 max_usage_count = 2;
+}
+
+message AliasParams{
+  uint64 tries_left = 1;
+  bool is_permanent = 2;
+}
+
+message Alias {
+  string id = 1;
+  string key = 2;
+  string url = 3;
+  bool is_active = 4;
+  AliasParams params = 5;
+}
+
+message KeyRequest {
+  string key = 1[(buf.validate.field).string = {
+    min_len:1
+  }];
+}
+
+message CreateRequest {
+  repeated SingleURL urls = 1[(buf.validate.field).repeated = {
+    min_items: 1
+    max_items: 2000
+  }];
+}
+
+message CreateResponse {
+  repeated string urls = 1;
+}
+
+enum EventType {
+  EVENT_TYPE_UNSPECIFIED = 0;
+  EVENT_TYPE_USED = 1;
+  EVENT_TYPE_EXPIRED = 2;
+}
+
+message Event {
+  Alias alias = 1;
+  string event_id = 2;
+  EventType event_type = 3;
+  google.protobuf.Timestamp occurred_at = 4;
+}
+
+

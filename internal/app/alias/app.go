@@ -1,4 +1,4 @@
-package app
+package alias
 
 import (
 	"context"
@@ -11,14 +11,12 @@ import (
 	"github.com/xloki21/alias/internal/controller/httpc"
 	"github.com/xloki21/alias/internal/controller/httpc/mw"
 	"github.com/xloki21/alias/internal/domain"
-	aliasapi "github.com/xloki21/alias/internal/gen/go/pbuf/alias"
-	"github.com/xloki21/alias/internal/infrastructure/squeue"
+	"github.com/xloki21/alias/internal/gen/go/pbuf/aliasapi"
 	"github.com/xloki21/alias/internal/repository"
 	"github.com/xloki21/alias/internal/repository/inmemory"
 	"github.com/xloki21/alias/internal/repository/mongodb"
-	"github.com/xloki21/alias/internal/services/aliassvc"
-	"github.com/xloki21/alias/internal/services/managersvc"
-	"github.com/xloki21/alias/internal/services/statssvc"
+	"github.com/xloki21/alias/internal/service/alias"
+	"github.com/xloki21/alias/pkg/kafker"
 	"github.com/xloki21/alias/pkg/keygen"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -60,12 +58,21 @@ type Application struct {
 func New(cfg config.AppConfig) (*Application, error) {
 	ctx := context.Background()
 
-	aliasUsedQ := squeue.New()
-	aliasExpiredQ := squeue.New()
+	producerAliasUsedCfg := cfg.GetProducerConfig("Alias Used Event Producer")
+	producerAliasExpiredCfg := cfg.GetProducerConfig("Alias Expired Event Producer")
 
-	var managerService *managersvc.Manager
-	var statsService *statssvc.Statistics
-	var aliasService *aliassvc.Alias
+	producerAliasUsed, err := kafker.NewProducer(producerAliasUsedCfg.GetBrokersURI(), producerAliasUsedCfg.Topic, nil)
+	if err != nil {
+		zap.S().Fatalf("cannot create producer: topic=%s", producerAliasUsedCfg.Topic)
+		return nil, err
+	}
+
+	producerAliasExpired, err := kafker.NewProducer(producerAliasExpiredCfg.GetBrokersURI(), producerAliasExpiredCfg.Topic, nil)
+	if err != nil {
+		zap.S().Fatalf("cannot create producer: topic=%s", producerAliasExpiredCfg.Topic)
+		return nil, err
+	}
+	var aliasService *alias.Alias
 
 	keyGen := keygen.NewURLSafeRandomStringGenerator()
 
@@ -105,25 +112,16 @@ func New(cfg config.AppConfig) (*Application, error) {
 		}
 
 		aliasRepo := mongodb.NewAliasRepository(db.Collection(mongodb.AliasCollectionName))
-		statsRepo := mongodb.NewStatisticsRepository(db.Collection(mongodb.StatsCollectionName))
-		managerService = managersvc.NewManager(aliasRepo, aliasUsedQ)
-		statsService = statssvc.NewStatistics(statsRepo, aliasExpiredQ)
-		aliasService = aliassvc.NewAlias(aliasExpiredQ, aliasUsedQ, aliasRepo, keyGen)
+		aliasService = alias.NewAlias(producerAliasExpired, producerAliasUsed, aliasRepo, keyGen)
 
 	case repository.InMemory:
 		aliasRepo := inmemory.NewAliasRepository()
-		statsRepo := inmemory.NewStatisticsRepository()
-		managerService = managersvc.NewManager(aliasRepo, aliasUsedQ)
-		statsService = statssvc.NewStatistics(statsRepo, aliasExpiredQ)
-		aliasService = aliassvc.NewAlias(aliasExpiredQ, aliasUsedQ, aliasRepo, keyGen)
+		aliasService = alias.NewAlias(producerAliasExpired, producerAliasUsed, aliasRepo, keyGen)
 
 	default:
 		zap.S().Fatalf("unknown storage type: %s", cfg.Storage.Type)
 		return nil, domain.ErrUnknownStorageType
 	}
-	managerService.Process(ctx)
-	statsService.Process(ctx)
-
 	zap.S().Infow("core", zap.String("state", "selected storage type"), zap.String("type", string(cfg.Storage.Type)))
 
 	grpcServer := grpc.NewServer(grpc.UnaryInterceptor(interceptors.LoggingInterceptor))

@@ -10,8 +10,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
-	"github.com/xloki21/alias/internal/app"
+	"github.com/xloki21/alias/internal/app/alias"
 	"github.com/xloki21/alias/internal/config"
+	"github.com/xloki21/alias/internal/config/base"
 	"github.com/xloki21/alias/internal/repository"
 	"github.com/xloki21/alias/tests"
 	"io"
@@ -24,19 +25,19 @@ import (
 )
 
 var testCfg = config.AppConfig{
-	Service: config.Service{
+	Service: &config.Service{
 		HTTP:        "localhost:8080",
 		GRPC:        "localhost:8081",
 		GRPCGateway: "localhost:8082",
 		BaseURL:     "http://localhost:8080",
 	},
-	Storage: config.StorageConfig{
+	Storage: &base.StorageConfig{
 		Type: repository.MongoDB,
-		MongoDB: &config.MongoDBStorageConfig{
+		MongoDB: &base.MongoDBStorageConfig{
 			Database: "aliases",
 		},
 	},
-	LoggerConfig: config.LoggerConfig{
+	LoggerConfig: &base.LoggerConfig{
 		Level:    "info",
 		Encoding: "console",
 	},
@@ -61,25 +62,36 @@ func TestApi_e2e(t *testing.T) {
 
 	testCfg.Storage.MongoDB.URI = connstr
 
-	application, err := app.New(testCfg)
+	application, err := alias.New(testCfg)
 	assert.NoError(t, err)
 
 	go application.Run(ctx)
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	// waiting for startup as app run in non-blocking way
+	time.Sleep(3 * time.Second)
+	client := &http.Client{}
 
 	endpointAliasTarget := fmt.Sprintf("%s%s", testCfg.Service.BaseURL, testEndpointAlias)
 
-	t.Run("Create aliases should be ok", func(t *testing.T) {
+	t.Run("Create permanent aliases should be ok", func(t *testing.T) {
 		resp, err := client.Post(endpointAliasTarget,
-			"application/json", strings.NewReader("{\"urls\": [\"http://www.ya.ru\"]}"))
+			"application/json", strings.NewReader("{\"urls\": [{\"url\": \"http://www.ya.ru\"}]}"))
 		assert.NoError(t, err)
 		assert.Equal(t, http.StatusCreated, resp.StatusCode)
 
 	})
+
+	t.Run("Create aliases with restricted usages should be ok", func(t *testing.T) {
+		resp, err := client.Post(endpointAliasTarget,
+			"application/json", strings.NewReader("{\"urls\": [{\"url\": \"http://www.ya.ru\",\"maxUsageCount\": 3}]}"))
+		assert.NoError(t, err)
+		assert.Equal(t, http.StatusCreated, resp.StatusCode)
+
+	})
+
 	t.Run("Create aliases should fail: request body is invalid", func(t *testing.T) {
 		resp, err := client.Post(endpointAliasTarget,
-			"application/json", strings.NewReader("{\"fail-key\": [\"http://www.ya.ru\"]}"))
+			"application/json", strings.NewReader("{\"invalid-field\": [\"http://www.ya.ru\"]}"))
 		assert.NoError(t, err)
 		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 
@@ -117,7 +129,7 @@ func TestApi_e2e(t *testing.T) {
 
 	t.Run("Remove alias should be ok", func(t *testing.T) {
 		resp, err := client.Post(endpointAliasTarget,
-			"application/json", strings.NewReader("{\"urls\": [\"http://www.ya.ru\"]}"))
+			"application/json", strings.NewReader("{\"urls\": [{\"url\": \"http://www.ya.ru\",\"maxUsageCount\": 3}]}"))
 		assert.NoError(t, err)
 		assert.Equal(t, http.StatusCreated, resp.StatusCode)
 
@@ -143,9 +155,8 @@ func TestApi_e2e(t *testing.T) {
 	})
 
 	t.Run("Redirect should be ok", func(t *testing.T) {
-		resp, err := client.Post(
-			fmt.Sprintf("%s%s", testCfg.Service.BaseURL, testEndpointAlias),
-			"application/json", strings.NewReader("{\"urls\": [\"http://www.ya.ru\"]}"))
+		resp, err := client.Post(endpointAliasTarget,
+			"application/json", strings.NewReader("{\"urls\": [{\"url\": \"http://www.ya.ru\",\"maxUsageCount\": 3}]}"))
 		assert.NoError(t, err)
 		assert.Equal(t, http.StatusCreated, resp.StatusCode)
 
@@ -168,9 +179,9 @@ func TestApi_e2e(t *testing.T) {
 
 	t.Run("Redirect should fail after alias has been expired", func(t *testing.T) {
 		maxUsageCount := 3
-		resp, err := client.Post(
-			fmt.Sprintf("%s%s?maxUsageCount=%d", testCfg.Service.BaseURL, testEndpointAlias, maxUsageCount),
-			"application/json", strings.NewReader("{\"urls\": [\"http://www.ya.ru\"]}"))
+		contentStr := fmt.Sprintf("{\"urls\": [{\"url\": \"http://www.ya.ru\",\"maxUsageCount\": %d}]}", maxUsageCount)
+		resp, err := client.Post(endpointAliasTarget,
+			"application/json", strings.NewReader(contentStr))
 		assert.NoError(t, err)
 		assert.Equal(t, http.StatusCreated, resp.StatusCode)
 

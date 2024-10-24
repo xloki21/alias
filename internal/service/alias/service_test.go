@@ -1,4 +1,4 @@
-package aliassvc
+package alias
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/xloki21/alias/internal/domain"
-	"github.com/xloki21/alias/internal/services/aliassvc/mocks"
+	"github.com/xloki21/alias/internal/service/alias/mocks"
 	"net/url"
 	"testing"
 )
@@ -105,7 +105,7 @@ func TestAlias_Create(t *testing.T) {
 	}
 }
 
-func TestAlias_FindOriginalURL(t *testing.T) {
+func TestAlias_FindAlias(t *testing.T) {
 	t.Parallel()
 	type args struct {
 		ctx context.Context
@@ -151,12 +151,11 @@ func TestAlias_FindOriginalURL(t *testing.T) {
 			t.Parallel()
 			th := NewTestHelper(t)
 			wants := tt.mockFunc(th, tt.args)
-			got, err := th.service.FindOriginalURL(tt.args.ctx, tt.args.key)
+			got, err := th.service.FindAlias(tt.args.ctx, tt.args.key)
 			assert.Equal(t, wants, got)
 			assert.ErrorIs(t, err, tt.expectErr)
 		})
 	}
-
 }
 
 func TestAlias_Use(t *testing.T) {
@@ -182,7 +181,7 @@ func TestAlias_Use(t *testing.T) {
 			name: "use expired alias",
 			args: args{ctx: context.Background(), alias: &testData[0]},
 			mockFunc: func(th *TestHelper, args args) *domain.Alias {
-				th.expiredQ.On("Produce", mock.AnythingOfType("AliasExpired"))
+				th.expiredQ.On("WriteMessage", context.Background(), mock.AnythingOfType("AliasExpired")).Return(nil)
 				return nil
 			},
 			expectErr: domain.ErrAliasExpired,
@@ -191,7 +190,7 @@ func TestAlias_Use(t *testing.T) {
 			name: "use valid alias with ttl successfully",
 			args: args{ctx: context.Background(), alias: &testData[1]},
 			mockFunc: func(th *TestHelper, args args) *domain.Alias {
-				th.usedQ.On("Produce", mock.AnythingOfType("AliasUsed"))
+				th.usedQ.On("WriteMessage", context.Background(), mock.AnythingOfType("AliasUsed")).Return(nil)
 				return args.alias
 			},
 		},
@@ -208,9 +207,7 @@ func TestAlias_Use(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			th := NewTestHelper(t)
-			wants := tt.mockFunc(th, tt.args)
-			got, err := th.service.Use(tt.args.ctx, tt.args.alias)
-			assert.Equal(t, wants, got)
+			err := th.service.Use(tt.args.ctx, tt.args.alias)
 			assert.ErrorIs(t, err, tt.expectErr)
 		})
 	}

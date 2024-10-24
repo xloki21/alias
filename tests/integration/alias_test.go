@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/xloki21/alias/internal/domain"
-	"github.com/xloki21/alias/internal/services/aliassvc"
+	"github.com/xloki21/alias/internal/service/alias"
 	"github.com/xloki21/alias/tests"
 	"testing"
 )
@@ -24,7 +24,6 @@ func TestAlias_Create_MongoDB(t *testing.T) {
 	}(container, ctx)
 
 	aliasService := tests.NewTestAliasService(ctx, db)
-
 	type args struct {
 		ctx      context.Context
 		requests []domain.CreateRequest
@@ -37,7 +36,7 @@ func TestAlias_Create_MongoDB(t *testing.T) {
 	}{
 		{
 			name:        "create multiple aliases with success",
-			args:        args{ctx: context.Background(), requests: aliassvc.TestSetAliasCreationRequests(2000)},
+			args:        args{ctx: context.Background(), requests: alias.TestSetAliasCreationRequests(2000)},
 			expectedErr: nil,
 		},
 	}
@@ -50,13 +49,13 @@ func TestAlias_Create_MongoDB(t *testing.T) {
 	}
 }
 
-func TestAlias_FindOriginalURL_MongoDB(t *testing.T) {
+func TestAlias_FindAlias_MongoDB(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
 	testData := []domain.Alias{
-		aliassvc.TestAlias(t, false),
-		aliassvc.TestAlias(t, true),
+		alias.TestAlias(t, false),
+		alias.TestAlias(t, true),
 	}
 
 	container, db := tests.SetupMongoDBContainer(t, testData)
@@ -79,13 +78,13 @@ func TestAlias_FindOriginalURL_MongoDB(t *testing.T) {
 		expectErr error
 	}{
 		{
-			name:      "original url found successfully",
+			name:      "alias found successfully",
 			args:      args{ctx: context.Background(), key: testData[0].Key},
 			wants:     &testData[0],
 			expectErr: nil,
 		},
 		{
-			name:      "original url not found",
+			name:      "alias not found",
 			args:      args{ctx: context.Background(), key: "lookup-key"},
 			wants:     nil,
 			expectErr: domain.ErrAliasNotFound,
@@ -94,7 +93,7 @@ func TestAlias_FindOriginalURL_MongoDB(t *testing.T) {
 
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
-			got, err := aliasService.FindOriginalURL(ctx, testCase.args.key)
+			got, err := aliasService.FindAlias(ctx, testCase.args.key)
 			assert.ErrorIs(t, err, testCase.expectErr)
 			if testCase.wants != nil {
 				assert.Equal(t, testCase.wants.URL, got.URL)
@@ -108,9 +107,9 @@ func TestAlias_Use_MongoDB(t *testing.T) {
 	ctx := context.Background()
 
 	testData := []domain.Alias{
-		aliassvc.TestAlias(t, false),
-		aliassvc.TestAlias(t, true),
-		aliassvc.TestExpiredAlias(t),
+		alias.TestAlias(t, false),
+		alias.TestAlias(t, true),
+		alias.TestExpiredAlias(t),
 	}
 	testData[2].Params.TriesLeft = 0
 
@@ -153,8 +152,7 @@ func TestAlias_Use_MongoDB(t *testing.T) {
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-			got, err := aliasService.Use(testCase.args.ctx, testCase.args.alias)
-			assert.Equal(t, testCase.wants, got)
+			err := aliasService.Use(testCase.args.ctx, testCase.args.alias)
 			assert.ErrorIs(t, err, testCase.expectErr)
 		})
 	}
@@ -165,8 +163,8 @@ func TestAlias_Remove_MongoDB(t *testing.T) {
 	ctx := context.Background()
 
 	testData := []domain.Alias{
-		aliassvc.TestAlias(t, false),
-		aliassvc.TestAlias(t, true),
+		alias.TestAlias(t, false),
+		alias.TestAlias(t, true),
 	}
 
 	container, db := tests.SetupMongoDBContainer(t, testData)

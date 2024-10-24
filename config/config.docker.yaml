@@ -8,7 +8,35 @@ storage:
   config:
     uri: mongodb://mongodb:27017
     database: appdb
+producers:
+  - name: "Alias Used Event Producer"
+    topic: "used"
+    brokers:
+      - name: "kafka"
+        type: "kafka"
+        URI: "kafka:29092"
+  - name: "Alias Expired Event Producer"
+    topic: "expired"
+    brokers:
+      - name: "kafka"
+        type: "kafka"
+        URI: "kafka:29092"
 
+consumers:
+  - name: "Alias Used Event Consumer"
+    group_id: "used_q"
+    topic: "used"
+    brokers:
+      - name: "kafka"
+        type: "kafka"
+        URI: "kafka:29092"
+  - name: "Alias Expired Event Consumer"
+    group_id: "expired_q"
+    topic: "expired"
+    brokers:
+      - name: "kafka"
+        type: "kafka"
+        URI: "kafka:29092"
 logger:
   level: info
   encoding: console

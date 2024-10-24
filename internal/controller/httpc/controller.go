@@ -7,34 +7,30 @@ import (
 	"fmt"
 	"github.com/xloki21/alias/internal/domain"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 	"io"
 	"net/http"
 	"net/url"
-	"strconv"
-	"sync"
 )
 
 const maxGoroutines = 10
 
 type aliasService interface {
 	Create(ctx context.Context, requests []domain.CreateRequest) ([]domain.Alias, error)
-	FindOriginalURL(ctx context.Context, key string) (*domain.Alias, error)
-	Use(ctx context.Context, alias *domain.Alias) (*domain.Alias, error)
+	FindAlias(ctx context.Context, key string) (*domain.Alias, error)
+	Use(ctx context.Context, alias *domain.Alias) error
 	Remove(ctx context.Context, key string) error
 }
 
 type requestURLList struct {
-	URLs []string `json:"urls"`
+	URLs []struct {
+		Url           string `json:"url"`
+		MaxUsageCount uint64 `json:"maxUsageCount,omitempty"`
+	} `json:"urls"`
 }
 
 type responseURLList struct {
 	URLs []string `json:"urls"`
-}
-
-// helper struct to keep order of the validated URL's
-type indexedResult struct {
-	index   int
-	request domain.CreateRequest
 }
 
 type Controller struct {
@@ -50,25 +46,6 @@ func (ac *Controller) CreateAlias(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 		return
-	}
-
-	// parse query params
-	query := r.URL.Query()
-	var isPermanent bool
-	var triesLeftValue int
-	if maxUsageCount, ok := query["maxUsageCount"]; !ok {
-		isPermanent = true
-	} else {
-		if len(maxUsageCount) != 1 {
-			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
-			return
-		}
-		value, err := strconv.ParseInt(maxUsageCount[0], 10, 64)
-		if err != nil {
-			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
-			return
-		}
-		triesLeftValue = int(value)
 	}
 
 	content, err := io.ReadAll(r.Body)
@@ -88,43 +65,34 @@ func (ac *Controller) CreateAlias(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// validate request
-	wg := sync.WaitGroup{}
-	semaphore := make(chan struct{}, maxGoroutines)
-	errChan := make(chan error, len(payload.URLs))
-	resultChan := make(chan indexedResult, len(payload.URLs))
-	for index, urlString := range payload.URLs {
-		semaphore <- struct{}{}
-		wg.Add(1)
-		go func(index int, urlString string) {
-			defer wg.Done()
-			validURL, err := url.Parse(urlString)
-			if err != nil {
-				errChan <- err
-			}
-			resultChan <- indexedResult{index: index, request: domain.CreateRequest{
-				Params: domain.TTLParams{TriesLeft: triesLeftValue, IsPermanent: isPermanent},
-				URL:    validURL,
-			}}
-
-		}(index, urlString)
-		<-semaphore
-	}
-	wg.Wait()
-
-	close(semaphore)
-	close(resultChan)
-	close(errChan)
-
-	for errVal := range errChan {
-		if errVal != nil {
-			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
-			return
-		}
-	}
+	g := errgroup.Group{}
+	g.SetLimit(maxGoroutines)
 	requests := make([]domain.CreateRequest, len(payload.URLs), len(payload.URLs))
-	for entry := range resultChan {
-		requests[entry.index] = entry.request
+	for index, singleURL := range payload.URLs {
+		index := index
+		singleURL := singleURL
+		g.Go(func() error {
+			requests[index] = domain.CreateRequest{}
+			validURL, err := url.Parse(singleURL.Url)
+			if err != nil {
+				return domain.ErrInvalidURLFormat
+			}
+
+			requests[index] = domain.CreateRequest{
+				Params: domain.TTLParams{TriesLeft: singleURL.MaxUsageCount, IsPermanent: singleURL.MaxUsageCount <= 0},
+				URL:    validURL,
+			}
+			return nil
+		})
+	}
+
+	if err := g.Wait(); err != nil {
+		if errors.Is(err, domain.ErrInvalidURLFormat) {
+			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		} else {
+			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		}
+		return
 	}
 
 	aliases, err := ac.service.Create(r.Context(), requests)
@@ -160,20 +128,22 @@ func (ac *Controller) Redirect(w http.ResponseWriter, r *http.Request) {
 	}
 	key := r.PathValue("key")
 
-	alias, err := ac.service.FindOriginalURL(r.Context(), key)
+	alias, err := ac.service.FindAlias(r.Context(), key)
 
 	if err != nil {
 		if errors.Is(err, domain.ErrAliasNotFound) {
-			zap.S().Error("alias not found", zap.String("key", key))
+			//zap.S().Error("alias not found", zap.String("key", key))
+			zap.S().WithOptions(zap.AddStacktrace(zap.DPanicLevel)).Errorw("HTTP", zap.String("error", domain.ErrAliasNotFound.Error()))
+
 			http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 		} else {
+			zap.S().WithOptions(zap.AddStacktrace(zap.DPanicLevel)).Errorw("HTTP", zap.String("error", "internal server error"))
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		}
 		return
 	}
 
-	alias, err = ac.service.Use(r.Context(), alias)
-
+	err = ac.service.Use(r.Context(), alias)
 	if err != nil {
 		if errors.Is(err, domain.ErrAliasExpired) {
 			http.Error(w, "url expired", http.StatusGone)

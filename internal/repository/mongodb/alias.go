@@ -13,10 +13,7 @@ import (
 	"net/url"
 )
 
-const (
-	AliasCollectionName = "aliases"
-	StatsCollectionName = "stats"
-)
+const AliasCollectionName = "aliases"
 
 // AliasDTO is DTO for AliasCollectionName collection
 type AliasDTO struct {
@@ -91,11 +88,11 @@ func (a *AliasRepository) Find(ctx context.Context, key string) (*domain.Alias, 
 		if errors.Is(result.Err(), mongo.ErrNoDocuments) {
 			return nil, domain.ErrAliasNotFound
 		}
-		return nil, result.Err()
+		return nil, domain.ErrAliasSearchEngineFailure
 	}
 	doc := new(AliasDTO)
 	if err := result.Decode(doc); err != nil {
-		return nil, err
+		return nil, domain.ErrAliasDecodeFailed
 	}
 
 	alias := &domain.Alias{
@@ -103,7 +100,7 @@ func (a *AliasRepository) Find(ctx context.Context, key string) (*domain.Alias, 
 		Key:      doc.Key,
 		URL:      doc.URL,
 		IsActive: doc.IsActive,
-		Params:   domain.TTLParams{TriesLeft: doc.TriesLeft, IsPermanent: doc.IsPermanent},
+		Params:   domain.TTLParams{TriesLeft: uint64(doc.TriesLeft), IsPermanent: doc.IsPermanent},
 	}
 	return alias, nil
 }
@@ -142,10 +139,6 @@ func (a *AliasRepository) DecreaseTTLCounter(ctx context.Context, key string) er
 
 	if err := result.Decode(doc); err != nil {
 		return fmt.Errorf("%s: %w", fn, err)
-	}
-
-	if doc.TriesLeft == 0 {
-		return domain.ErrAliasExpired
 	}
 
 	return nil

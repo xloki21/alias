@@ -1,18 +1,26 @@
 //go:generate mockery
-package aliassvc
+package alias
 
 import (
 	"context"
 	"fmt"
 	"github.com/xloki21/alias/internal/domain"
+	"github.com/xloki21/alias/pkg/kafker"
 	"go.uber.org/zap"
-	"sync"
+	"golang.org/x/sync/errgroup"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
 	keyLength     = 8
 	maxGoroutines = 10
 )
+
+type eventProducer interface {
+	WriteMessage2(ctx context.Context, message proto.Message) error
+	WriteMessage(ctx context.Context, message kafker.Message) error
+	Close()
+}
 
 type Alias struct {
 	repo         aliasRepo
@@ -23,6 +31,7 @@ type Alias struct {
 
 // NewAlias creates a new alias service
 func NewAlias(expiredQ eventProducer, usedQ eventProducer, repo aliasRepo, keyGenerator keyGenerator) *Alias {
+
 	return &Alias{
 		expiredQ:     expiredQ,
 		usedQ:        usedQ,
@@ -35,10 +44,6 @@ type aliasRepo interface {
 	Save(ctx context.Context, aliases []domain.Alias) error
 	Find(ctx context.Context, key string) (*domain.Alias, error)
 	Remove(ctx context.Context, key string) error
-}
-
-type eventProducer interface {
-	Produce(event any)
 }
 
 type keyGenerator interface {
@@ -57,60 +62,34 @@ func (s *Alias) Create(ctx context.Context, requests []domain.CreateRequest) ([]
 		zap.String("fn", fn),
 		zap.Int("requests count", len(requests)))
 
-	type indexedResult struct {
-		index int
-		alias domain.Alias
-	}
+	g := errgroup.Group{}
+	g.SetLimit(maxGoroutines)
 
-	// validate request
-	wg := sync.WaitGroup{}
-	semaphore := make(chan struct{}, maxGoroutines)
-	errChan := make(chan error, len(requests))
-	resultChan := make(chan indexedResult, len(requests))
+	aliases := make([]domain.Alias, len(requests))
 	for index := range requests {
-		semaphore <- struct{}{}
-		wg.Add(1)
-		go func(index int) {
-			defer wg.Done()
-
+		index := index
+		g.Go(func() error {
 			key, err := s.keyGenerator.Generate(keyLength)
 			if err != nil {
-				errChan <- fmt.Errorf("%s: %w", fn, err)
+				return fmt.Errorf("%s: %w", fn, err)
 			}
-
-			resultChan <- indexedResult{
-				index: index,
-				alias: domain.Alias{
-					Key:      key,
-					IsActive: true,
-					URL:      requests[index].URL,
-					Params:   requests[index].Params,
-				},
+			aliases[index] = domain.Alias{
+				Key:      key,
+				IsActive: true,
+				URL:      requests[index].URL,
+				Params:   requests[index].Params,
 			}
-
-		}(index)
-		<-semaphore
+			return nil
+		})
 	}
-	wg.Wait()
-
-	close(semaphore)
-	close(errChan)
-	close(resultChan)
-
-	for err := range errChan {
-		if err != nil {
-			zap.S().WithOptions(zap.AddStacktrace(zap.PanicLevel)).
-				Errorw("service",
-					zap.String("name", s.Name()),
-					zap.String("fn", fn),
-					zap.Error(err),
-				)
-			return nil, err
-		}
-	}
-	aliases := make([]domain.Alias, len(requests))
-	for entry := range resultChan {
-		aliases[entry.index] = entry.alias
+	if err := g.Wait(); err != nil {
+		zap.S().WithOptions(zap.AddStacktrace(zap.PanicLevel)).
+			Errorw("service",
+				zap.String("name", s.Name()),
+				zap.String("fn", fn),
+				zap.Error(err),
+			)
+		return nil, err
 	}
 
 	if err := s.repo.Save(ctx, aliases); err != nil {
@@ -128,8 +107,8 @@ func (s *Alias) Create(ctx context.Context, requests []domain.CreateRequest) ([]
 	return aliases, nil
 }
 
-func (s *Alias) FindOriginalURL(ctx context.Context, key string) (*domain.Alias, error) {
-	fn := "FindOriginalURL"
+func (s *Alias) FindAlias(ctx context.Context, key string) (*domain.Alias, error) {
+	fn := "FindAlias"
 	zap.S().Infow("service",
 		zap.String("name", s.Name()),
 		zap.String("fn", fn),
@@ -141,7 +120,7 @@ func (s *Alias) FindOriginalURL(ctx context.Context, key string) (*domain.Alias,
 	return alias, nil
 }
 
-func (s *Alias) Use(ctx context.Context, alias *domain.Alias) (*domain.Alias, error) {
+func (s *Alias) Use(ctx context.Context, alias *domain.Alias) error {
 	fn := "Use"
 	zap.S().Infow("service",
 		zap.String("name", s.Name()),
@@ -149,21 +128,33 @@ func (s *Alias) Use(ctx context.Context, alias *domain.Alias) (*domain.Alias, er
 		zap.String("key", alias.Key))
 
 	if alias.Params.IsPermanent {
-		return alias, nil
+		return nil
 	}
 
 	// check if alias is expired and send event with publisher
 	if alias.Params.TriesLeft == 0 {
 		event := alias.Expired()
 
-		s.expiredQ.Produce(event)
+		// todo: sr-serialization
+		//err := s.expiredQ.WriteMessage2(ctx, event.AsProto())
+		//if err != nil {
+		//	return err
+		//}
+
+		msg, err := kafker.MessageFromProto(event.AsProto())
+		if err != nil {
+			return domain.ErrInternal
+		}
+		if err := s.expiredQ.WriteMessage(ctx, *msg); err != nil {
+			return domain.ErrProducerGeneralFailure
+		}
 
 		zap.S().Infow("service",
 			zap.String("name", s.Name()),
 			zap.String("fn", fn),
 			zap.String("published", event.String()),
 		)
-		return nil, domain.ErrAliasExpired
+		return domain.ErrAliasExpired
 	}
 
 	zap.S().Infow("service",
@@ -171,20 +162,25 @@ func (s *Alias) Use(ctx context.Context, alias *domain.Alias) (*domain.Alias, er
 		zap.String("fn", fn),
 		zap.String("alias", alias.Type()),
 		zap.String("key", alias.Key),
-		zap.Int("tries left", alias.Params.TriesLeft))
+		zap.Uint64("tries left", alias.Params.TriesLeft))
 
 	// publish event
 	event := alias.Redirected()
+	msg, err := kafker.MessageFromProto(event.AsProto())
+	if err != nil {
+		return domain.ErrInternal
+	}
 
-	s.usedQ.Produce(event)
+	if err := s.usedQ.WriteMessage(ctx, *msg); err != nil {
+		return err // todo: fix
+	}
 
 	zap.S().Infow("service",
 		zap.String("name", s.Name()),
 		zap.String("fn", fn),
 		zap.String("publish", event.String()),
 	)
-
-	return alias, nil
+	return nil
 }
 
 // Remove removes the alias link

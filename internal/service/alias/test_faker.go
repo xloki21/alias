@@ -1,4 +1,4 @@
-package aliassvc
+package alias
 
 import (
 	"fmt"
@@ -15,7 +15,7 @@ func TestSetAliasCreationRequests(quantity int) []domain.CreateRequest {
 	requests := make([]domain.CreateRequest, quantity)
 
 	for i := 0; i < quantity; i++ {
-		triesLeft := rand.Intn(10)
+		triesLeft := uint64(rand.Intn(10))
 		isPermanent := true
 		if triesLeft == 0 {
 			isPermanent = false
@@ -32,7 +32,7 @@ func TestSetAliasCreationRequests(quantity int) []domain.CreateRequest {
 }
 
 func TestAlias(t *testing.T, isPermanent bool) domain.Alias {
-	triesLeft := 1 + rand.Intn(10)
+	triesLeft := uint64(1 + rand.Intn(10))
 	if isPermanent {
 		triesLeft = 0
 	}
