@@ -61,9 +61,17 @@ func New(cfg config.AppConfig) (*Application, error) {
 	producerAliasUsedCfg := cfg.GetProducerConfig("Alias Used Event Producer")
 	producerAliasExpiredCfg := cfg.GetProducerConfig("Alias Expired Event Producer")
 
-	producerAliasUsed := kafker.NewProducer(producerAliasUsedCfg.GetBrokersURI(), producerAliasUsedCfg.Topic, nil)
+	producerAliasUsed, err := kafker.NewProducer(producerAliasUsedCfg.GetBrokersURI(), producerAliasUsedCfg.Topic, nil)
+	if err != nil {
+		zap.S().Fatalf("cannot create producer: topic=%s", producerAliasUsedCfg.Topic)
+		return nil, err
+	}
 
-	producerAliasExpired := kafker.NewProducer(producerAliasExpiredCfg.GetBrokersURI(), producerAliasExpiredCfg.Topic, nil)
+	producerAliasExpired, err := kafker.NewProducer(producerAliasExpiredCfg.GetBrokersURI(), producerAliasExpiredCfg.Topic, nil)
+	if err != nil {
+		zap.S().Fatalf("cannot create producer: topic=%s", producerAliasExpiredCfg.Topic)
+		return nil, err
+	}
 	var aliasService *alias.Alias
 
 	keyGen := keygen.NewURLSafeRandomStringGenerator()

@@ -1,7 +1,6 @@
 x-alias-common:
   &alias-common
   image: ${ALIAS_IMAGE_NAME:-alias:1.0.0}
-  profiles: [in-memory, mongodb, kafka]
   build:
     context: .
   environment:
@@ -11,6 +10,7 @@ x-alias-common:
     MONGO_AUTHSOURCE: ${MONGO_AUTHSOURCE:-admin}
   networks:
     - aliasnet
+
 services:
   alias-server:
     <<: *alias-common
@@ -45,7 +45,6 @@ services:
       replicas: 3
 
   mongodb:
-    profiles: [mongodb, kafka]
     image: mongo:7.0.6
     container_name: mongodb
     environment:
@@ -61,8 +60,7 @@ services:
       - aliasnet
 
   zookeeper:
-    profiles: [in-memory, mongodb, kafka]
-    image: confluentinc/cp-zookeeper:7.7.1.arm64
+    image: confluentinc/cp-zookeeper:7.7.1
     hostname: zookeeper
     container_name: zookeeper
     ports:
@@ -74,8 +72,7 @@ services:
       - aliasnet
 
   kafka:
-    profiles: [in-memory, mongodb, kafka]
-    image: confluentinc/cp-kafka:7.7.1.arm64
+    image: confluentinc/cp-kafka:7.7.1
     hostname: kafka
     container_name: kafka
     depends_on:
@@ -94,13 +91,41 @@ services:
       KAFKA_CONFLUENT_BALANCER_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_SCHEMA_REGISTRY_URL: "schema-registry:8085"
       KAFKA_JMX_PORT: 9997
       KAFKA_JMX_HOSTNAME: kafka
     networks:
       - aliasnet
 
+  schema-registry:
+    image: confluentinc/cp-schema-registry:7.7.1
+    hostname: schema-registry
+    container_name: schema-registry
+    depends_on:
+      - kafka
+    ports:
+      - "8085:8081"
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: 'kafka:29092'
+    networks:
+      - aliasnet
+
+  schema-registry-ui:
+    image: landoop/schema-registry-ui
+    container_name: schema-registry-ui
+    depends_on:
+      - schema-registry
+      - kafka
+    ports:
+      - "8089:8000"
+    environment:
+      - SCHEMAREGISTRY_URL=http://schema-registry:8085
+      - PROXY=true
+    networks:
+      - aliasnet
+
   kafka-ui:
-    profiles: [in-memory, mongodb, kafka]
     container_name: kafka-ui
     image: provectuslabs/kafka-ui:latest
     depends_on:
@@ -108,15 +133,15 @@ services:
     ports:
       - "8088:8080"
     volumes:
-      - ./kui_TEMP_config.yml:/etc/kafkaui/dynamic_config.yaml
+      - ./config/kafka-ui.config.yml:/etc/kafkaui/dynamic_config.yaml
     environment:
       DYNAMIC_CONFIG_ENABLED: true
     networks:
       - aliasnet
 
   kafka-init-topics:
-    profiles: [in-memory, mongodb, kafka]
-    image: confluentinc/cp-kafka:7.7.1.arm64
+    image: confluentinc/cp-kafka:7.7.1
+    container_name: kafka-init-topics
     depends_on:
       - kafka
     command: "bash -c 'echo Waiting for Kafka to be ready... && \

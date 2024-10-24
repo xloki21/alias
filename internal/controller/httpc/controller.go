@@ -132,9 +132,12 @@ func (ac *Controller) Redirect(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		if errors.Is(err, domain.ErrAliasNotFound) {
-			zap.S().Error("alias not found", zap.String("key", key))
+			//zap.S().Error("alias not found", zap.String("key", key))
+			zap.S().WithOptions(zap.AddStacktrace(zap.DPanicLevel)).Errorw("HTTP", zap.String("error", domain.ErrAliasNotFound.Error()))
+
 			http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 		} else {
+			zap.S().WithOptions(zap.AddStacktrace(zap.DPanicLevel)).Errorw("HTTP", zap.String("error", "internal server error"))
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		}
 		return

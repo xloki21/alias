@@ -1,17 +1,23 @@
 version: '3'
 
 tasks:
+  up-all:
+    cmd: docker compose up -d --build
+    deps:
+      - grpc-generate-proto
+    desc: "Start all services"
+
+  down-all:
+    cmd: docker compose down --remove-orphans
+    desc: "Stop all services"
+
+  up-partial:
+    cmd: docker compose up mongodb zookeeper kafka schema-registry schema-registry-ui kafka-ui kafka-init-topics -d
+    desc: "Start all necessary services"
+
   generate-mocks:
     cmd: go generate ./...
     desc: "Generate mocks using mockery"
-
-  build-server-app:
-    cmd: go build -o alias-server -v ./cmd/server/main.go
-    desc: "Build server app"
-
-  build-client-app:
-    cmd: go build -o alias-client -v ./cmd/client/main.go
-    desc: "Build client app"
 
   ensure-mockery-installed:
     cmds:
@@ -46,10 +52,6 @@ tasks:
       - task: integration-test
       - task: e2e-test
     desc: "Run all tests"
-
-  docker:
-    cmd: docker build . -t alias:1.0.0
-    desc: "Build docker image"
 
   integration-test:
     cmds:

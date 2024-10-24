@@ -1,9 +1,9 @@
-FROM golang:1.22-alpine AS builder
+FROM golang:1.23-alpine AS builder
 COPY .. /src
 WORKDIR /src
 
 RUN go mod download
-RUN go build -o /bin/alias-server /src/cmd/alias/server/main.go
+RUN go build -o /bin/alias-server /src/cmd/alias/main.go
 RUN go build -o /bin/service-manager /src/cmd/manager/main.go
 RUN go build -o /bin/service-statscollector /src/cmd/stats/main.go
 

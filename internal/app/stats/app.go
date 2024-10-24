@@ -30,7 +30,11 @@ func New(cfg config.AppConfig) (*Application, error) {
 	ctx := context.Background()
 
 	consumerCfg := cfg.GetConsumerConfig("Alias Expired Event Consumer")
-	consumer := kafker.NewConsumer(consumerCfg.GroupID, consumerCfg.Topic, consumerCfg.GetBrokersURI(), nil)
+	consumer, err := kafker.NewConsumer(consumerCfg.GroupID, consumerCfg.Topic, consumerCfg.GetBrokersURI(), nil)
+	if err != nil {
+		zap.S().Fatalf("cannot create consumer: topic=%s", consumerCfg.Topic)
+		return nil, err
+	}
 
 	var statsService *stats.Statistics
 

@@ -8,6 +8,7 @@ import (
 	"github.com/xloki21/alias/pkg/kafker"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -16,6 +17,7 @@ const (
 )
 
 type eventProducer interface {
+	WriteMessage2(ctx context.Context, message proto.Message) error
 	WriteMessage(ctx context.Context, message kafker.Message) error
 	Close()
 }
@@ -132,13 +134,17 @@ func (s *Alias) Use(ctx context.Context, alias *domain.Alias) error {
 	// check if alias is expired and send event with publisher
 	if alias.Params.TriesLeft == 0 {
 		event := alias.Expired()
-		// make proto
+
+		// todo: sr-serialization
+		//err := s.expiredQ.WriteMessage2(ctx, event.AsProto())
+		//if err != nil {
+		//	return err
+		//}
 
 		msg, err := kafker.MessageFromProto(event.AsProto())
 		if err != nil {
 			return domain.ErrInternal
 		}
-
 		if err := s.expiredQ.WriteMessage(ctx, *msg); err != nil {
 			return domain.ErrProducerGeneralFailure
 		}

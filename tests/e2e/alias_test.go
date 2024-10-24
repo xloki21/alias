@@ -12,7 +12,7 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/xloki21/alias/internal/app/alias"
 	"github.com/xloki21/alias/internal/config"
-	aliasapp2 "github.com/xloki21/alias/internal/config/aliascfg"
+	"github.com/xloki21/alias/internal/config/base"
 	"github.com/xloki21/alias/internal/repository"
 	"github.com/xloki21/alias/tests"
 	"io"
@@ -25,19 +25,19 @@ import (
 )
 
 var testCfg = config.AppConfig{
-	Service: config.Service{
+	Service: &config.Service{
 		HTTP:        "localhost:8080",
 		GRPC:        "localhost:8081",
 		GRPCGateway: "localhost:8082",
 		BaseURL:     "http://localhost:8080",
 	},
-	Storage: aliasapp2.StorageConfig{
+	Storage: &base.StorageConfig{
 		Type: repository.MongoDB,
-		MongoDB: &aliasapp2.MongoDBStorageConfig{
+		MongoDB: &base.MongoDBStorageConfig{
 			Database: "aliases",
 		},
 	},
-	LoggerConfig: aliasapp2.LoggerConfig{
+	LoggerConfig: &base.LoggerConfig{
 		Level:    "info",
 		Encoding: "console",
 	},

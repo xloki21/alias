@@ -152,8 +152,7 @@ func TestAlias_Use_MongoDB(t *testing.T) {
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-			got, err := aliasService.Use(testCase.args.ctx, testCase.args.alias)
-			assert.Equal(t, testCase.wants, got)
+			err := aliasService.Use(testCase.args.ctx, testCase.args.alias)
 			assert.ErrorIs(t, err, testCase.expectErr)
 		})
 	}

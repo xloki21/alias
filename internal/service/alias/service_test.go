@@ -207,9 +207,7 @@ func TestAlias_Use(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			th := NewTestHelper(t)
-			wants := tt.mockFunc(th, tt.args)
-			got, err := th.service.Use(tt.args.ctx, tt.args.alias)
-			assert.Equal(t, wants, got)
+			err := th.service.Use(tt.args.ctx, tt.args.alias)
 			assert.ErrorIs(t, err, tt.expectErr)
 		})
 	}

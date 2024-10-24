@@ -29,7 +29,11 @@ type Application struct {
 func New(cfg config.AppConfig) (*Application, error) {
 	ctx := context.Background()
 	consumerCfg := cfg.GetConsumerConfig("Alias Used Event Consumer")
-	consumer := kafker.NewConsumer(consumerCfg.GroupID, consumerCfg.Topic, consumerCfg.GetBrokersURI(), nil)
+	consumer, err := kafker.NewConsumer(consumerCfg.GroupID, consumerCfg.Topic, consumerCfg.GetBrokersURI(), nil)
+	if err != nil {
+		zap.S().Fatalf("cannot create consumer: topic=%s", consumerCfg.Topic)
+		return nil, err
+	}
 
 	var managerService *manager.Manager
 

@@ -141,10 +141,6 @@ func (a *AliasRepository) DecreaseTTLCounter(ctx context.Context, key string) er
 		return fmt.Errorf("%s: %w", fn, err)
 	}
 
-	if doc.TriesLeft == 0 {
-		return domain.ErrAliasExpired
-	}
-
 	return nil
 }
 
