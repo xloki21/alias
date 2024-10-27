@@ -25,8 +25,9 @@ type producer struct {
 
 func NewProducer(brokers []string, topic string, tlsCfg *tls.Config) (Producer, error) {
 	writer := &kafkago.Writer{
-		Addr:  kafkago.TCP(brokers...),
-		Topic: topic,
+		Addr:      kafkago.TCP(brokers...),
+		Topic:     topic,
+		BatchSize: 1,
 		Balancer: &kafkago.RoundRobin{
 			ChunkSize: 1,
 		},

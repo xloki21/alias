@@ -17,6 +17,9 @@ services:
     container_name: alias
     command:
       - /bin/alias-server
+    depends_on:
+      - mongodb
+      - kafka
     ports:
       - "8080:8080"
       - "8081:8081"
@@ -28,6 +31,9 @@ services:
     <<: *alias-common
     command:
       - /bin/service-manager
+    depends_on:
+      - mongodb
+      - kafka
     volumes:
       - ./config/config.docker.yaml:/etc/app/config.yaml
     deploy:
@@ -38,6 +44,9 @@ services:
     <<: *alias-common
     command:
       - /bin/service-statscollector
+    depends_on:
+      - mongodb
+      - kafka
     volumes:
       - ./config/config.docker.yaml:/etc/app/config.yaml
     deploy:
